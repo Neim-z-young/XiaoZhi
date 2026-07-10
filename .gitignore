@@ -1,0 +1,33 @@
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+logs/*
+target/*
+.vscode
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+/bgpc-api-modules/**/target
+/bgpc-api-modules/**/*.iml
+/bgpc-common-pojo/target
+/bgpc-common-pojo/*.iml
+/bgpc-api-app/*.iml
+/bgpc-api-app/target
+/bgpc-api-core/*.iml
+/bgpc-api-core/target
+/bgpc-api-payment/**/target
+/bgpc-api-payment/**/*.iml
+/LOG_PATH_IS_UNDEFINED
+/bgpc-api-app/LOG_PATH_IS_UNDEFINED
+
+
+### 其他
+.trae/output/
