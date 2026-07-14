@@ -31,3 +31,6 @@ target/*
 
 ### 其他
 .trae/output/
+
+### node_modules
+xiaozhi-backend/node_modules/*

@@ -1,0 +1,35 @@
+# 小智后端配置文件
+# 所有配置通过此文件管理，不使用环境变量
+
+database:
+  type: sqlite  # sqlite | postgres
+  # sqlite 配置
+  database: ./data/xiaozhi.db
+  # postgres 配置（type: postgres 时使用）
+  # host: localhost
+  # port: 5432
+  # username: postgres
+  # password: postgres
+  # database: xiaozhi
+
+redis:
+  host: localhost
+  port: 6379
+
+app:
+  host: 0.0.0.0
+  port: 3000
+  jwtSecret: xiaozhi-super-secret-key-change-in-production
+  jwtExpiresIn: 7d
+
+models:
+  default: gpt-4o-mini
+  list:
+    - gpt-4o
+    - gpt-4o-mini
+    - claude-3-5-sonnet
+    - claude-3-haiku
+
+vector:
+  dimension: 1536
+  provider: pgvector
