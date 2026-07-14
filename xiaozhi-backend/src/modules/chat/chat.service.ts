@@ -1,12 +1,16 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Session } from '../../entities/session.entity';
 import { Message } from '../../entities/message.entity';
 import { Agent } from '../../entities/agent.entity';
+import { AIGatewayService } from '../ai/ai-gateway.service';
+import { AIMessage } from '../ai/ai-adapter.interface';
 
 @Injectable()
 export class ChatService {
+  private readonly logger = new Logger(ChatService.name);
+
   constructor(
     @InjectRepository(Session)
     private readonly sessionRepository: Repository<Session>,
@@ -14,6 +18,7 @@ export class ChatService {
     private readonly messageRepository: Repository<Message>,
     @InjectRepository(Agent)
     private readonly agentRepository: Repository<Agent>,
+    private readonly aiGateway: AIGatewayService,
   ) {}
 
   async sendMessage(sessionId: string, userId: string, content: string): Promise<Message> {
@@ -26,11 +31,10 @@ export class ChatService {
     }
 
     // 保存用户消息
-    const userMessage = this.messageRepository.create({
-      sessionId,
-      role: 'user',
-      content,
-    });
+    const userMessage = new Message();
+    userMessage.sessionId = sessionId;
+    userMessage.role = 'user';
+    userMessage.content = content;
     await this.messageRepository.save(userMessage);
 
     // 更新会话最后消息时间
@@ -38,17 +42,60 @@ export class ChatService {
       lastMessageAt: new Date(),
     });
 
-    // TODO: 调用 AI 模型获取回复
-    // 这里暂时返回模拟响应
-    const assistantMessage = this.messageRepository.create({
-      sessionId,
-      role: 'assistant',
-      content: '这是一个模拟响应，实际需要接入 AI 模型',
-      meta: { model: session.agentId ? 'simulated' : 'none' },
-    });
-    await this.messageRepository.save(assistantMessage);
+    // 获取历史消息构建上下文
+    const historyMessages = await this.getMessages(sessionId, userId);
+    const aiMessages: AIMessage[] = historyMessages.map(m => ({
+      role: m.role as 'user' | 'assistant' | 'system',
+      content: m.content,
+    }));
 
-    return assistantMessage;
+    // 添加当前用户消息
+    aiMessages.push({ role: 'user', content });
+
+    // 获取智能体配置
+    let model = 'gpt-4o-mini';
+    let systemPrompt = '你是一个有帮助的 AI 助手。';
+    
+    if (session.agentId) {
+      const agent = await this.agentRepository.findOne({ where: { id: session.agentId } });
+      if (agent) {
+        model = agent.modelId || model;
+        if (agent.prompt) {
+          aiMessages.unshift({ role: 'system', content: agent.prompt });
+        }
+      }
+    }
+
+    try {
+      // 调用 AI
+      const response = await this.aiGateway.complete({
+        model,
+        messages: aiMessages,
+        temperature: 0.7,
+      });
+
+      // 保存 AI 回复
+      const assistantMessage = new Message();
+      assistantMessage.sessionId = sessionId;
+      assistantMessage.role = 'assistant';
+      assistantMessage.content = response.content;
+      assistantMessage.meta = { model: response.model, usage: response.usage };
+      await this.messageRepository.save(assistantMessage);
+
+      return assistantMessage;
+    } catch (error) {
+      this.logger.error(`AI call failed: ${error.message}`);
+      
+      // 保存错误回复
+      const errorMessage = new Message();
+      errorMessage.sessionId = sessionId;
+      errorMessage.role = 'assistant';
+      errorMessage.content = `抱歉，发生了错误：${error.message}`;
+      errorMessage.meta = { error: true };
+      await this.messageRepository.save(errorMessage);
+
+      return errorMessage;
+    }
   }
 
   async getMessages(sessionId: string, userId: string, before?: string, limit = 50): Promise<Message[]> {

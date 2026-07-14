@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var ChatService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChatService = void 0;
 const common_1 = require("@nestjs/common");
@@ -19,11 +20,14 @@ const typeorm_2 = require("typeorm");
 const session_entity_1 = require("../../entities/session.entity");
 const message_entity_1 = require("../../entities/message.entity");
 const agent_entity_1 = require("../../entities/agent.entity");
-let ChatService = class ChatService {
-    constructor(sessionRepository, messageRepository, agentRepository) {
+const ai_gateway_service_1 = require("../ai/ai-gateway.service");
+let ChatService = ChatService_1 = class ChatService {
+    constructor(sessionRepository, messageRepository, agentRepository, aiGateway) {
         this.sessionRepository = sessionRepository;
         this.messageRepository = messageRepository;
         this.agentRepository = agentRepository;
+        this.aiGateway = aiGateway;
+        this.logger = new common_1.Logger(ChatService_1.name);
     }
     async sendMessage(sessionId, userId, content) {
         const session = await this.sessionRepository.findOne({
@@ -32,23 +36,55 @@ let ChatService = class ChatService {
         if (!session) {
             throw new common_1.NotFoundException('会话不存在');
         }
-        const userMessage = this.messageRepository.create({
-            sessionId,
-            role: 'user',
-            content,
-        });
+        const userMessage = new message_entity_1.Message();
+        userMessage.sessionId = sessionId;
+        userMessage.role = 'user';
+        userMessage.content = content;
         await this.messageRepository.save(userMessage);
         await this.sessionRepository.update(sessionId, {
             lastMessageAt: new Date(),
         });
-        const assistantMessage = this.messageRepository.create({
-            sessionId,
-            role: 'assistant',
-            content: '这是一个模拟响应，实际需要接入 AI 模型',
-            meta: { model: session.agentId ? 'simulated' : 'none' },
-        });
-        await this.messageRepository.save(assistantMessage);
-        return assistantMessage;
+        const historyMessages = await this.getMessages(sessionId, userId);
+        const aiMessages = historyMessages.map(m => ({
+            role: m.role,
+            content: m.content,
+        }));
+        aiMessages.push({ role: 'user', content });
+        let model = 'gpt-4o-mini';
+        let systemPrompt = '你是一个有帮助的 AI 助手。';
+        if (session.agentId) {
+            const agent = await this.agentRepository.findOne({ where: { id: session.agentId } });
+            if (agent) {
+                model = agent.modelId || model;
+                if (agent.prompt) {
+                    aiMessages.unshift({ role: 'system', content: agent.prompt });
+                }
+            }
+        }
+        try {
+            const response = await this.aiGateway.complete({
+                model,
+                messages: aiMessages,
+                temperature: 0.7,
+            });
+            const assistantMessage = new message_entity_1.Message();
+            assistantMessage.sessionId = sessionId;
+            assistantMessage.role = 'assistant';
+            assistantMessage.content = response.content;
+            assistantMessage.meta = { model: response.model, usage: response.usage };
+            await this.messageRepository.save(assistantMessage);
+            return assistantMessage;
+        }
+        catch (error) {
+            this.logger.error(`AI call failed: ${error.message}`);
+            const errorMessage = new message_entity_1.Message();
+            errorMessage.sessionId = sessionId;
+            errorMessage.role = 'assistant';
+            errorMessage.content = `抱歉，发生了错误：${error.message}`;
+            errorMessage.meta = { error: true };
+            await this.messageRepository.save(errorMessage);
+            return errorMessage;
+        }
     }
     async getMessages(sessionId, userId, before, limit = 50) {
         const session = await this.sessionRepository.findOne({
@@ -80,13 +116,14 @@ let ChatService = class ChatService {
     }
 };
 exports.ChatService = ChatService;
-exports.ChatService = ChatService = __decorate([
+exports.ChatService = ChatService = ChatService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(session_entity_1.Session)),
     __param(1, (0, typeorm_1.InjectRepository)(message_entity_1.Message)),
     __param(2, (0, typeorm_1.InjectRepository)(agent_entity_1.Agent)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
         typeorm_2.Repository,
-        typeorm_2.Repository])
+        typeorm_2.Repository,
+        ai_gateway_service_1.AIGatewayService])
 ], ChatService);
 //# sourceMappingURL=chat.service.js.map

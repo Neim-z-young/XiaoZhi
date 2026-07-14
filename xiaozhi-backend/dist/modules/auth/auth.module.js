@@ -10,6 +10,9 @@ exports.AuthModule = void 0;
 const common_1 = require("@nestjs/common");
 const jwt_1 = require("@nestjs/jwt");
 const passport_1 = require("@nestjs/passport");
+const auth_controller_1 = require("./auth.controller");
+const auth_service_1 = require("./auth.service");
+const jwt_strategy_1 = require("./strategies/jwt.strategy");
 let AuthModule = class AuthModule {
 };
 exports.AuthModule = AuthModule;
@@ -17,15 +20,14 @@ exports.AuthModule = AuthModule = __decorate([
     (0, common_1.Module)({
         imports: [
             passport_1.PassportModule.register({ defaultStrategy: 'jwt' }),
-            jwt_1.JwtModule.registerAsync({
-                useFactory: () => ({
-                    secret: 'xiaozhi-super-secret-key-change-in-production',
-                    signOptions: { expiresIn: '7d' },
-                }),
+            jwt_1.JwtModule.register({
+                secret: 'xiaozhi-super-secret-key-change-in-production',
+                signOptions: { expiresIn: '7d' },
             }),
         ],
-        providers: [],
-        exports: [jwt_1.JwtModule, passport_1.PassportModule],
+        controllers: [auth_controller_1.AuthController],
+        providers: [auth_service_1.AuthService, jwt_strategy_1.JwtStrategy],
+        exports: [auth_service_1.AuthService],
     })
 ], AuthModule);
 //# sourceMappingURL=auth.module.js.map

@@ -9,14 +9,15 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ConfigModule = void 0;
 const common_1 = require("@nestjs/common");
 const configuration_1 = require("./configuration");
+const model_config_service_1 = require("./model-config.service");
 let ConfigModule = class ConfigModule {
 };
 exports.ConfigModule = ConfigModule;
 exports.ConfigModule = ConfigModule = __decorate([
     (0, common_1.Global)(),
     (0, common_1.Module)({
-        providers: [configuration_1.ConfigService],
-        exports: [configuration_1.ConfigService],
+        providers: [configuration_1.ConfigService, model_config_service_1.ModelConfigService],
+        exports: [configuration_1.ConfigService, model_config_service_1.ModelConfigService],
     })
 ], ConfigModule);
 //# sourceMappingURL=config.module.js.map

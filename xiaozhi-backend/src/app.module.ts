@@ -10,6 +10,9 @@ import { KnowledgeModule } from './modules/knowledge/knowledge.module';
 import { MemoryModule } from './modules/memory/memory.module';
 import { SystemModule } from './modules/system/system.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { WorkspacesModule } from './modules/workspaces/workspaces.module';
+import { AIModule } from './modules/ai/ai.module';
+import { ModelsModule } from './modules/models/models.module';
 
 // 实体
 import { User } from './entities/user.entity';
@@ -62,6 +65,9 @@ import { KnowledgeBase } from './entities/knowledge-base.entity';
     KnowledgeModule,
     MemoryModule,
     SystemModule,
+    WorkspacesModule,
+    AIModule,
+    ModelsModule,
   ],
 })
 export class AppModule {}

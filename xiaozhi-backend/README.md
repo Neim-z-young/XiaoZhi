@@ -5,74 +5,116 @@
 ## 技术栈
 
 - **框架**: NestJS + TypeScript
-- **数据库**: PostgreSQL + pgvector
+- **数据库**: SQLite (开发) / PostgreSQL + pgvector (生产)
 - **缓存**: Redis
 - **认证**: JWT + Passport
 
 ## 快速开始
 
-### 1. 启动基础设施
+### 1. 安装依赖
 
 ```bash
-docker-compose up -d
+cd xiaozhi-backend
+npm install
 ```
 
-### 2. 安装依赖
+### 2. 配置数据库
+
+编辑 `config.yaml`：
+
+```yaml
+# 开发环境（使用 SQLite，无需安装数据库）
+database:
+  type: sqlite
+
+# 生产环境（使用 PostgreSQL）
+database:
+  type: postgres
+  host: localhost
+  port: 5432
+  username: postgres
+  password: postgres
+  database: xiaozhi
+```
+
+### 3. 启动
 
 ```bash
-pnpm install
+npm run start:dev
 ```
 
-### 3. 配置
+访问 http://localhost:3000/api/docs 查看 API 文档。
 
-编辑 `config.yaml` 修改数据库连接等配置。
+## 模块
 
-### 4. 启动开发服务器
-
-```bash
-pnpm start:dev
-```
-
-### 5. 访问 API 文档
-
-http://localhost:3000/api/docs
+| 模块 | 路径 | 说明 | 状态 |
+|------|------|------|------|
+| 认证 | `/auth` | 登录、Token | ✅ 完成 |
+| 智能体 | `/agents` | CRUD、绑定插件 | ✅ 完成 |
+| 会话 | `/sessions` | 会话管理 | ✅ 完成 |
+| 对话 | `/chat` | 消息、SSE 流式 | ✅ 完成 |
+| 工作区 | `/workspaces` | 文件索引 | ✅ 完成 |
+| 知识库 | `/knowledge-bases` | 文档 RAG | ✅ 完成 |
+| 插件 | `/plugins` | MCP/A2A 插件 | ✅ 完成 |
+| 记忆 | `/memory` | 短时/长时记忆 | ✅ 完成 |
+| 系统 | `/system` | 健康检查、模型列表 | ✅ 完成 |
 
 ## 目录结构
 
 ```
 src/
-├── main.ts                 # 入口
-├── app.module.ts           # 根模块
-├── config/                 # 配置
-├── entities/               # TypeORM 实体
+├── main.ts                    # 入口
+├── app.module.ts              # 根模块
+├── config/                    # 配置
+├── entities/                  # TypeORM 实体
 ├── modules/
-│   ├── agents/            # 智能体模块
-│   ├── sessions/          # 会话模块
-│   ├── chat/              # 对话模块
-│   ├── workspaces/        # 工作区模块
-│   ├── plugins/           # 插件模块
-│   ├── knowledge/         # 知识库模块
-│   └── memory/            # 记忆模块
-└── utils/                  # 工具函数
+│   ├── auth/                 # 认证
+│   ├── agents/              # 智能体
+│   ├── sessions/            # 会话
+│   ├── chat/                # 对话
+│   ├── workspaces/          # 工作区
+│   ├── plugins/             # 插件
+│   ├── knowledge/           # 知识库
+│   ├── memory/              # 记忆
+│   └── system/              # 系统
+└── utils/                    # 工具函数
 ```
 
-## API 概览
+## POC 验证文档
 
-| 模块 | 路径 | 说明 |
-|------|------|------|
-| 智能体 | `/api/v1/agents` | CRUD、绑定插件 |
-| 会话 | `/api/v1/sessions` | 会话管理 |
-| 对话 | `/api/v1/chat` | SSE 流式对话 |
-| 工作区 | `/api/v1/workspaces` | 文件索引 |
-| 知识库 | `/api/v1/knowledge-bases` | 文档 RAG |
-| 插件 | `/api/v1/plugins` | MCP/A2A 插件 |
-| 记忆 | `/api/v1/memory` | 短时/长时记忆 |
+- [MCP SDK POC 验证](../doc/backend/MCP-SDK-POC验证.md)
+- [vm2 沙箱 POC 验证](../doc/backend/vm2沙箱POC验证.md)
 
-## 待完成
+## API 示例
 
-- [ ] 完善所有模块 CRUD
-- [ ] 接入 MCP SDK
-- [ ] 实现 SSE 流式对话
-- [ ] vm2 沙箱 POC
-- [ ] 认证模块 JWT
+### 登录
+```bash
+curl -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "admin123"}'
+```
+
+### 创建智能体
+```bash
+curl -X POST http://localhost:3000/agents \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "我的助手", "modelId": "gpt-4o-mini"}'
+```
+
+### 发送消息
+```bash
+curl -X POST http://localhost:3000/chat \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"sessionId": "<session-id>", "message": "你好"}'
+```
+
+## 下一步计划
+
+- [ ] 接入真实 AI 模型（OpenAI/Claude）
+- [ ] 实现 MCP SDK 集成
+- [ ] vm2 沙箱生产验证
+- [ ] Redis 缓存集成
+- [ ] 向量检索集成 (pgvector)
 - [ ] 操作审计

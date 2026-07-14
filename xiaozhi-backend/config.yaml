@@ -1,5 +1,4 @@
 # 小智后端配置文件
-# 所有配置通过此文件管理，不使用环境变量
 
 database:
   type: sqlite  # sqlite | postgres
@@ -22,13 +21,50 @@ app:
   jwtSecret: xiaozhi-super-secret-key-change-in-production
   jwtExpiresIn: 7d
 
+# AI 模型配置
 models:
-  default: gpt-4o-mini
-  list:
-    - gpt-4o
-    - gpt-4o-mini
-    - claude-3-5-sonnet
-    - claude-3-haiku
+  # 默认模型
+  default: qwen35-35b-a3b-fp8
+  
+  # 已启用的模型列表
+  enabled:
+    - id: gpt-4o-mini
+      name: GPT-4o Mini
+      provider: openai
+      apiKeyEnv: OPENAI_API_KEY  # 环境变量名
+      # apiKey: sk-xxx  # 或直接配置 API Key（不推荐）
+      baseURL: https://api.openai.com/v1
+      maxTokens: 4096
+      temperature: 0.7
+      enabled: true
+      
+    - id: gpt-4o
+      name: GPT-4o
+      provider: openai
+      apiKeyEnv: OPENAI_API_KEY
+      baseURL: https://api.openai.com/v1
+      maxTokens: 8192
+      temperature: 0.7
+      enabled: true
+      
+    - id: claude-3-5-sonnet
+      name: Claude 3.5 Sonnet
+      provider: anthropic
+      apiKeyEnv: ANTHROPIC_API_KEY
+      baseURL: https://api.anthropic.com/v1
+      maxTokens: 8192
+      temperature: 0.7
+      enabled: true
+        
+    - id: qwen35-35b-a3b-fp8
+      name: Qwen 3.5
+      provider: openai
+      apiKeyEnv: QWEN_API_KEY
+      apiKey: sk-e5a0263ce05c4e5793fa86f5a522f95e
+      baseURL: https://eisapi.byd.com/open-api/1.0/llm/v1/qwen35-35b-a3b-fp8
+      maxTokens: 262144
+      temperature: 0.7
+      enabled: true
 
 vector:
   dimension: 1536
