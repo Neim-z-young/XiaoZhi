@@ -4,7 +4,7 @@ export declare class Message {
     sessionId: string;
     role: 'user' | 'assistant' | 'system';
     content: string;
-    meta: Record<string, any>;
+    meta: Record<string, any> | null;
     feedback: 'like' | 'dislike';
     feedbackComment: string | null;
     createdAt: Date;

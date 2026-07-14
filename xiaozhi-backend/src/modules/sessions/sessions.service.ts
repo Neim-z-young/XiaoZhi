@@ -15,7 +15,7 @@ export class SessionsService {
 
   async create(userId: string, createSessionDto: any): Promise<Session> {
     const session = new Session();
-    Object.assign(session, { ...createSessionDto, userId });
+    Object.assign(session, { ...createSessionDto, userId, lastMessageAt: new Date() });
     return this.sessionRepository.save(session) as Promise<Session>;
   }
 

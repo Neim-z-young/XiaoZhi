@@ -1,6 +1,24 @@
 import api from './api';
 import type { Agent } from '@/types';
 
+export interface CreateAgentDto {
+  name: string;
+  description?: string;
+  modelId?: string;
+  prompt?: string;
+  settings?: Record<string, any>;
+  enabled?: boolean;
+}
+
+export interface UpdateAgentDto {
+  name?: string;
+  description?: string;
+  modelId?: string;
+  prompt?: string;
+  settings?: Record<string, any>;
+  enabled?: boolean;
+}
+
 export const agentsApi = {
   list: (params?: { page?: number; pageSize?: number; keyword?: string }) =>
     api.get<{ list: Agent[]; total: number }>('/agents', { params }),
@@ -8,10 +26,10 @@ export const agentsApi = {
   get: (id: string) =>
     api.get<Agent>(`/agents/${id}`),
 
-  create: (data: Partial<Agent>) =>
+  create: (data: CreateAgentDto) =>
     api.post<Agent>('/agents', data),
 
-  update: (id: string, data: Partial<Agent>) =>
+  update: (id: string, data: UpdateAgentDto) =>
     api.put<Agent>(`/agents/${id}`, data),
 
   delete: (id: string) =>

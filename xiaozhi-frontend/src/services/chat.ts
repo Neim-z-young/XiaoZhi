@@ -1,33 +1,77 @@
 import api from './api';
-import type { Session, Message } from '@/types';
+import type { Message } from '@/types';
+
+export interface SendMessageDto {
+  sessionId: string;
+  message: string;
+  stream?: boolean;
+  model?: string;
+}
 
 export const chatApi = {
-  // 会话
-  createSession: (data: { agentId?: string; workspaceId?: string; title?: string }) =>
-    api.post<Session>('/sessions', data),
+  sendMessage: (data: SendMessageDto) =>
+    api.post<Message>('/chat', data),
 
-  listSessions: (params?: { page?: number; pageSize?: number; agentId?: string }) =>
-    api.get<{ list: Session[]; total: number }>('/sessions', { params }),
+  // 流式消息 - 使用 SSE
+  streamChat: (
+    sessionId: string,
+    message: string,
+    onMessage: (content: string) => void,
+    model?: string,
+    onComplete?: () => void,
+    onError?: (error: Event) => void,
+  ) => {
+    const token = localStorage.getItem('auth-storage');
+    let tokenValue = '';
+    try {
+      const parsed = token ? JSON.parse(token) : {};
+      tokenValue = parsed.state?.token || '';
+    } catch {}
 
-  getSession: (id: string) =>
-    api.get<Session>(`/sessions/${id}`),
+    const params = new URLSearchParams({
+      message: message,
+      token: tokenValue,
+    });
+    if (model) {
+      params.append('model', model);
+    }
 
-  deleteSession: (id: string) =>
-    api.delete(`/sessions/${id}`),
+    const eventSource = new EventSource(
+      `/api/chat/${sessionId}/stream?${params.toString()}`
+    );
 
-  // 消息
-  sendMessage: (sessionId: string, message: string, stream = true) =>
-    api.post<Message>('/chat', { sessionId, message, stream }),
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.content !== undefined) {
+          // 检查是否是错误消息
+          if (data.content.startsWith('错误:')) {
+            eventSource.close();
+            onError?.(data.content);
+            return;
+          }
+          onMessage(data.content);
+        }
+        if (data.done) {
+          eventSource.close();
+          onComplete?.();
+        }
+      } catch {
+        // Ignore parse errors
+      }
+    };
+
+    eventSource.onerror = (error) => {
+      eventSource.close();
+      onError?.(error);
+    };
+
+    return eventSource;
+  },
 
   stopGeneration: (sessionId: string) =>
     api.post(`/chat/${sessionId}/stop`),
 
   feedback: (messageId: string, rating: 'like' | 'dislike', comment?: string) =>
     api.post(`/chat/messages/${messageId}/feedback`, { rating, comment }),
-
-  // SSE 流式
-  streamChat: (sessionId: string, message: string) => {
-    const token = localStorage.getItem('auth-token');
-    return new EventSource(`/api/chat/${sessionId}/stream?message=${encodeURIComponent(message)}&token=${token}`);
-  },
 };

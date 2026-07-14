@@ -1,9 +1,7 @@
-import { Controller, Post, Get, Body, Param, Query, Res, Sse } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Query, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Response } from 'express';
 import { ChatService } from './chat.service';
-import { SendMessageDto } from './dto/send-message.dto';
-import { Observable, Subject } from 'rxjs';
 
 @ApiTags('对话')
 @ApiBearerAuth()
@@ -14,47 +12,59 @@ export class ChatController {
   @Post()
   @ApiOperation({ summary: '发送消息' })
   async sendMessage(
-    @Body() sendMessageDto: SendMessageDto,
+    @Body() body: { sessionId: string; message: string; model?: string },
   ) {
     return this.chatService.sendMessage(
-      sendMessageDto.sessionId,
+      body.sessionId,
       'default-user-id',
-      sendMessageDto.message,
+      body.message,
+      body.model,
     );
   }
 
-  @Sse(':sessionId/stream')
+  @Get(':sessionId/stream')
   @ApiOperation({ summary: 'SSE 流式对话' })
   async streamChat(
     @Param('sessionId') sessionId: string,
-    @Body() sendMessageDto: SendMessageDto,
+    @Query('message') message: string,
+    @Query('model') model: string,
     @Res() res: Response,
   ) {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
 
-    // TODO: 实际实现需要调用 AI 模型并流式返回
-    // 这里发送模拟数据
     const sendSSE = (data: object) => {
       res.write(`data: ${JSON.stringify(data)}\n\n`);
     };
 
-    sendSSE({ content: '这是一条模拟流式响应，实际需要接入 AI 模型', done: false });
+    try {
+      // 调用 AI 获取流式响应
+      const aiStream = await this.chatService.getAIStream(
+        sessionId,
+        'default-user-id',
+        message,
+        model,
+      );
 
-    setTimeout(() => {
+      for await (const chunk of aiStream) {
+        sendSSE({ content: chunk, done: false });
+      }
       sendSSE({ content: '', done: true });
-      res.end();
-    }, 1000);
+    } catch (error) {
+      console.error('Stream error:', error);
+      sendSSE({ content: `错误: ${error.message}`, done: true });
+    }
 
-    return;
+    res.end();
   }
 
   @Post(':sessionId/stop')
   @ApiOperation({ summary: '中断生成' })
   stopGeneration(@Param('sessionId') sessionId: string) {
-    // TODO: 实现中断逻辑
-    return { success: true, message: '生成已中断' };
+    this.chatService.stopGeneration(sessionId);
+    return { success: true };
   }
 
   @Post('messages/:messageId/feedback')

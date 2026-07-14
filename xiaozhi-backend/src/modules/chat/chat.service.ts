@@ -10,6 +10,7 @@ import { AIMessage } from '../ai/ai-adapter.interface';
 @Injectable()
 export class ChatService {
   private readonly logger = new Logger(ChatService.name);
+  private abortControllers = new Map<string, AbortController>();
 
   constructor(
     @InjectRepository(Session)
@@ -21,7 +22,7 @@ export class ChatService {
     private readonly aiGateway: AIGatewayService,
   ) {}
 
-  async sendMessage(sessionId: string, userId: string, content: string): Promise<Message> {
+  async sendMessage(sessionId: string, userId: string, content: string, model?: string): Promise<Message> {
     // 验证会话存在
     const session = await this.sessionRepository.findOne({
       where: { id: sessionId, userId },
@@ -53,13 +54,12 @@ export class ChatService {
     aiMessages.push({ role: 'user', content });
 
     // 获取智能体配置
-    let model = 'gpt-4o-mini';
-    let systemPrompt = '你是一个有帮助的 AI 助手。';
+    let selectedModel = model || 'gpt-4o-mini';
     
-    if (session.agentId) {
+    if (!model && session.agentId) {
       const agent = await this.agentRepository.findOne({ where: { id: session.agentId } });
       if (agent) {
-        model = agent.modelId || model;
+        selectedModel = agent.modelId || selectedModel;
         if (agent.prompt) {
           aiMessages.unshift({ role: 'system', content: agent.prompt });
         }
@@ -69,7 +69,7 @@ export class ChatService {
     try {
       // 调用 AI
       const response = await this.aiGateway.complete({
-        model,
+        model: selectedModel,
         messages: aiMessages,
         temperature: 0.7,
       });
@@ -95,6 +95,75 @@ export class ChatService {
       await this.messageRepository.save(errorMessage);
 
       return errorMessage;
+    }
+  }
+
+  async getAIStream(sessionId: string, userId: string, content: string, model?: string): Promise<AsyncGenerator<string>> {
+    // 验证会话
+    let session = await this.sessionRepository.findOne({
+      where: { id: sessionId, userId },
+    });
+    
+    if (!session) {
+      // 如果会话不存在，创建一个新的
+      session = new Session();
+      session.id = sessionId;
+      session.userId = userId;
+      session.lastMessageAt = new Date();
+      session.createdAt = new Date();
+      await this.sessionRepository.save(session);
+    }
+
+    // 保存用户消息
+    const userMessage = new Message();
+    userMessage.sessionId = sessionId;
+    userMessage.role = 'user';
+    userMessage.content = content;
+    await this.messageRepository.save(userMessage);
+
+    // 获取历史消息
+    const historyMessages = await this.getMessages(sessionId, userId);
+    const aiMessages: AIMessage[] = historyMessages.map(m => ({
+      role: m.role as 'user' | 'assistant' | 'system',
+      content: m.content,
+    }));
+    aiMessages.push({ role: 'user', content });
+
+    // 获取模型（优先使用传入的模型，其次使用 agent 配置，最后默认）
+    let selectedModel = model || 'gpt-4o-mini';
+    if (!model && session.agentId) {
+      const agent = await this.agentRepository.findOne({ where: { id: session.agentId } });
+      if (agent?.modelId) {
+        selectedModel = agent.modelId;
+      }
+    }
+    this.logger.log(`getAIStream: received model="${model}", selectedModel="${selectedModel}", session.agentId="${session.agentId}"`);
+
+    // 创建 AbortController 用于中断
+    const abortController = new AbortController();
+    this.abortControllers.set(sessionId, abortController);
+
+    // 返回异步生成器
+    const self = this;
+    return (async function*() {
+      try {
+        for await (const chunk of self.aiGateway.stream({ model: selectedModel, messages: aiMessages })) {
+          if (abortController.signal.aborted) {
+            break;
+          }
+          yield chunk.content;
+        }
+      } finally {
+        self.abortControllers.delete(sessionId);
+      }
+    })();
+  }
+
+  stopGeneration(sessionId: string): void {
+    const controller = this.abortControllers.get(sessionId);
+    if (controller) {
+      controller.abort();
+      this.abortControllers.delete(sessionId);
     }
   }
 

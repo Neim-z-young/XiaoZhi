@@ -7,6 +7,7 @@ const app_module_1 = require("./app.module");
 const configuration_1 = require("./config/configuration");
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
+    app.setGlobalPrefix('api');
     const configService = app.get(configuration_1.ConfigService);
     const port = configService.get('app.port') || 3000;
     const host = configService.get('app.host') || '0.0.0.0';

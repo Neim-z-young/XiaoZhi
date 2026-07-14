@@ -25,7 +25,7 @@ let SessionsService = class SessionsService {
     }
     async create(userId, createSessionDto) {
         const session = new session_entity_1.Session();
-        Object.assign(session, { ...createSessionDto, userId });
+        Object.assign(session, { ...createSessionDto, userId, lastMessageAt: new Date() });
         return this.sessionRepository.save(session);
     }
     async findAll(userId, page = 1, pageSize = 20, agentId) {

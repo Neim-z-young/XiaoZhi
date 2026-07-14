@@ -16,30 +16,37 @@ exports.ChatController = void 0;
 const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const chat_service_1 = require("./chat.service");
-const send_message_dto_1 = require("./dto/send-message.dto");
 let ChatController = class ChatController {
     constructor(chatService) {
         this.chatService = chatService;
     }
-    async sendMessage(sendMessageDto) {
-        return this.chatService.sendMessage(sendMessageDto.sessionId, 'default-user-id', sendMessageDto.message);
+    async sendMessage(body) {
+        return this.chatService.sendMessage(body.sessionId, 'default-user-id', body.message, body.model);
     }
-    async streamChat(sessionId, sendMessageDto, res) {
+    async streamChat(sessionId, message, model, res) {
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
+        res.setHeader('Access-Control-Allow-Origin', '*');
         const sendSSE = (data) => {
             res.write(`data: ${JSON.stringify(data)}\n\n`);
         };
-        sendSSE({ content: '这是一条模拟流式响应，实际需要接入 AI 模型', done: false });
-        setTimeout(() => {
+        try {
+            const aiStream = await this.chatService.getAIStream(sessionId, 'default-user-id', message, model);
+            for await (const chunk of aiStream) {
+                sendSSE({ content: chunk, done: false });
+            }
             sendSSE({ content: '', done: true });
-            res.end();
-        }, 1000);
-        return;
+        }
+        catch (error) {
+            console.error('Stream error:', error);
+            sendSSE({ content: `错误: ${error.message}`, done: true });
+        }
+        res.end();
     }
     stopGeneration(sessionId) {
-        return { success: true, message: '生成已中断' };
+        this.chatService.stopGeneration(sessionId);
+        return { success: true };
     }
     feedback(messageId, body) {
         return this.chatService.feedback(messageId, 'default-user-id', body.rating, body.comment);
@@ -51,17 +58,18 @@ __decorate([
     (0, swagger_1.ApiOperation)({ summary: '发送消息' }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [send_message_dto_1.SendMessageDto]),
+    __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], ChatController.prototype, "sendMessage", null);
 __decorate([
-    (0, common_1.Sse)(':sessionId/stream'),
+    (0, common_1.Get)(':sessionId/stream'),
     (0, swagger_1.ApiOperation)({ summary: 'SSE 流式对话' }),
     __param(0, (0, common_1.Param)('sessionId')),
-    __param(1, (0, common_1.Body)()),
-    __param(2, (0, common_1.Res)()),
+    __param(1, (0, common_1.Query)('message')),
+    __param(2, (0, common_1.Query)('model')),
+    __param(3, (0, common_1.Res)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, send_message_dto_1.SendMessageDto, Object]),
+    __metadata("design:paramtypes", [String, String, String, Object]),
     __metadata("design:returntype", Promise)
 ], ChatController.prototype, "streamChat", null);
 __decorate([

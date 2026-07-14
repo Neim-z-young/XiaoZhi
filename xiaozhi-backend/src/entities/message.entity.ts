@@ -15,8 +15,8 @@ export class Message {
   @Column({ type: 'text' })
   content: string;
 
-  @Column({ type: 'json' })
-  meta: Record<string, any>;
+  @Column({ type: 'json', nullable: true })
+  meta: Record<string, any> | null;
 
   @Column({ length: 20, nullable: true })
   feedback: 'like' | 'dislike';
