@@ -13,6 +13,10 @@ import { AuthModule } from './modules/auth/auth.module';
 import { WorkspacesModule } from './modules/workspaces/workspaces.module';
 import { AIModule } from './modules/ai/ai.module';
 import { ModelsModule } from './modules/models/models.module';
+import { McpModule } from './modules/mcp/mcp.module';
+import { SandboxModule } from './modules/sandbox/sandbox.module';
+import { ToolsModule } from './modules/tools/tools.module';
+import { AgentModule } from './modules/agent/agent.module';
 
 // 实体
 import { User } from './entities/user.entity';
@@ -68,6 +72,10 @@ import { KnowledgeBase } from './entities/knowledge-base.entity';
     WorkspacesModule,
     AIModule,
     ModelsModule,
+    McpModule,
+    SandboxModule,
+    ToolsModule,
+    AgentModule,
   ],
 })
 export class AppModule {}

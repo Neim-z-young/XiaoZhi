@@ -22,6 +22,10 @@ const auth_module_1 = require("./modules/auth/auth.module");
 const workspaces_module_1 = require("./modules/workspaces/workspaces.module");
 const ai_module_1 = require("./modules/ai/ai.module");
 const models_module_1 = require("./modules/models/models.module");
+const mcp_module_1 = require("./modules/mcp/mcp.module");
+const sandbox_module_1 = require("./modules/sandbox/sandbox.module");
+const tools_module_1 = require("./modules/tools/tools.module");
+const agent_module_1 = require("./modules/agent/agent.module");
 const user_entity_1 = require("./entities/user.entity");
 const agent_entity_1 = require("./entities/agent.entity");
 const plugin_entity_1 = require("./entities/plugin.entity");
@@ -75,6 +79,10 @@ exports.AppModule = AppModule = __decorate([
             workspaces_module_1.WorkspacesModule,
             ai_module_1.AIModule,
             models_module_1.ModelsModule,
+            mcp_module_1.McpModule,
+            sandbox_module_1.SandboxModule,
+            tools_module_1.ToolsModule,
+            agent_module_1.AgentModule,
         ],
     })
 ], AppModule);

@@ -25,8 +25,9 @@ class OpenAIAdapter {
             throw new Error(`OpenAI API error: ${response.status} - ${error}`);
         }
         const data = await response.json();
+        const content = data.choices[0]?.message?.content || '';
         return {
-            content: data.choices[0]?.message?.content || '',
+            content: content,
             model: data.model,
             usage: data.usage ? {
                 promptTokens: data.usage.prompt_tokens,

@@ -229,11 +229,128 @@
     .bg-orange-500 { background-color: #f97316; }
     .bg-success\/10 { background-color: rgba(34,197,94,0.1); }
     .bg-warning\/10 { background-color: rgba(245,158,11,0.1); }
+    .bg-error\/10 { background-color: rgba(239,68,68,0.1); }
     .plugin-card:hover { background-color: #334155; }
     .sidebar-collapsed { width: 4rem; }
     .sidebar-collapsed .sidebar-text { display: none; }
     .sidebar-collapsed #collapseIcon { transform: rotate(180deg); }
     .sidebar-collapsed .logo-icon { width: 2rem; height: 2rem; font-size: 0.875rem; }
+    
+    /* Agent 模式样式 */
+    .agent-mode-indicator {
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      padding: 0.25rem 0.75rem;
+      border-radius: var(--radius-pill);
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: white;
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+    }
+    
+    /* 思考过程 - Claude Code/Trae 风格 */
+    .thinking-block {
+      margin: 0.75rem 0;
+      border-radius: var(--radius-control);
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .thinking-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.15s ease;
+    }
+    .thinking-header:hover { background: var(--surface-lighter); }
+    .thinking-icon {
+      width: 1.25rem;
+      height: 1.25rem;
+      border-radius: 0.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.625rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .thinking-icon.thinking { background: rgba(59,130,246,0.2); color: #60a5fa; }
+    .thinking-icon.action { background: rgba(245,158,11,0.2); color: #fbbf24; }
+    .thinking-icon.observation { background: rgba(34,197,94,0.2); color: #22c55e; }
+    .thinking-label {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+    .thinking-progress {
+      font-size: 0.625rem;
+      color: var(--text-muted);
+      margin-left: auto;
+    }
+    .thinking-toggle {
+      font-size: 0.6875rem;
+      color: var(--text-muted);
+      padding: 0.125rem 0.375rem;
+      border-radius: 0.25rem;
+      background: var(--surface-lighter);
+      transition: all 0.15s ease;
+    }
+    .thinking-toggle:hover { background: var(--border); color: var(--text-primary); }
+    .thinking-body {
+      padding: 0.75rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.8125rem;
+      line-height: 1.6;
+      color: var(--text-secondary);
+      display: none;
+    }
+    .thinking-block.expanded .thinking-body { display: block; }
+    .thinking-block.expanded .thinking-toggle-icon { transform: rotate(90deg); }
+    .thinking-content {
+      white-space: pre-wrap;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.75rem;
+    }
+    .thinking-content .tool-name {
+      color: var(--primary);
+      font-weight: 600;
+    }
+    .thinking-content .result-success { color: var(--success); }
+    .thinking-content .result-error { color: var(--error); }
+    .thinking-collapsed-hint {
+      font-size: 0.6875rem;
+      color: var(--text-muted);
+      font-style: italic;
+    }
+    
+    /* 流式动画 */
+    .streaming-cursor {
+      display: inline-block;
+      width: 0.5rem;
+      height: 1rem;
+      background: var(--primary);
+      animation: blink 1s infinite;
+      margin-left: 0.125rem;
+      vertical-align: middle;
+    }
+    @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+    
+    /* 步骤点动画 */
+    .thinking-dots span {
+      display: inline-block;
+      width: 0.375rem;
+      height: 0.375rem;
+      border-radius: 50%;
+      background: var(--text-muted);
+      animation: thinking-pulse 1.4s infinite ease-in-out both;
+    }
+    .thinking-dots span:nth-child(1) { animation-delay: -0.32s; }
+    .thinking-dots span:nth-child(2) { animation-delay: -0.16s; }
+    @keyframes thinking-pulse { 0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }
     
     /* 现代按钮样式 - Ecosystem Visualization */
     .btn-primary {
@@ -495,106 +612,72 @@
           <button class="px-3 py-1.5 rounded-lg text-sm whitespace-nowrap btn-ghost">历史会话 1</button>
           <button class="px-3 py-1.5 rounded-lg text-sm whitespace-nowrap btn-ghost">历史会话 2</button>
         </div>
-        <div class="ml-auto flex items-center gap-2">
-          <button class="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors btn-secondary">
-            <div class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium" style="background: linear-gradient(135deg, #fbbf24, #f97316);">AI</div>
-            <span class="text-sm">代码助手</span>
-            <svg class="w-4 h-4 text-textMuted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        <div class="ml-auto flex items-center gap-3">
+          <!-- Agent 模式切换 -->
+          <button id="agentModeBtn" onclick="toggleAgentMode()" class="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors btn-ghost" title="切换 Agent 模式">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+            <span id="agentModeText">普通模式</span>
           </button>
+          <!-- 模型选择器 -->
+          <div class="relative">
+            <button onclick="toggleModelDropdown()" class="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors btn-secondary">
+              <div class="w-5 h-5 rounded-full flex items-center justify-center text-xs font-medium" style="background: linear-gradient(135deg, #fbbf24, #f97316);">AI</div>
+              <span id="selectedModelName" class="text-sm">qwen35-35b</span>
+              <svg class="w-4 h-4 text-textMuted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div id="modelDropdown" class="absolute right-0 top-full mt-1 bg-surfaceLight border border-border rounded-lg shadow-lg overflow-hidden z-20 hidden" style="min-width: 12rem;">
+              <div class="px-3 py-2 text-xs text-textMuted border-b border-border">选择模型</div>
+              <button onclick="selectModel('qwen35-35b-a3b-fp8', 'Qwen 35B')" class="w-full px-3 py-2 text-sm text-left hover:bg-surfaceLighter transition-colors flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-success"></span>
+                Qwen 35B
+              </button>
+              <button onclick="selectModel('gpt-4o-mini', 'GPT-4o Mini')" class="w-full px-3 py-2 text-sm text-left hover:bg-surfaceLighter transition-colors flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-success"></span>
+                GPT-4o Mini
+              </button>
+              <button onclick="selectModel('claude-3-haiku', 'Claude 3 Haiku')" class="w-full px-3 py-2 text-sm text-left hover:bg-surfaceLighter transition-colors flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-warning"></span>
+                Claude 3 Haiku
+              </button>
+            </div>
+          </div>
           <button class="btn-icon" title="操作建议"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></button>
           <button class="btn-icon" title="清空对话"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
         </div>
       </header>
       
-      <div id="chatArea" class="flex-1 overflow-y-auto p-6 space-y-6 scroll-container">
-        <div class="text-center py-12">
-          <div class="logo-icon mx-auto mb-6" style="width: 5rem; height: 5rem; font-size: 2.25rem;">X</div>
-          <h2 class="text-2xl font-bold mb-2">你好，我是小智</h2>
-          <p class="text-textSecondary max-w-md mx-auto mb-8">一个插件化的 AI 助手，可以帮助你完成代码开发、文档处理、数据分析等多种任务</p>
-          <div class="flex flex-wrap justify-center gap-3 max-w-2xl mx-auto">
-            <button class="px-4 py-2.5 rounded-xl text-sm flex items-center gap-2 transition-colors btn-secondary" onclick="sendMessage('帮我分析这个项目的代码结构')">
-              <svg class="w-4 h-4" style="color: var(--primary);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-              分析代码结构
-            </button>
-            <button class="px-4 py-2.5 rounded-xl text-sm flex items-center gap-2 transition-colors btn-secondary" onclick="sendMessage('帮我写一个简单的REST API')">
-              <svg class="w-4 h-4" style="color: #34d399;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
-              写REST API
-            </button>
-            <button class="px-4 py-2.5 rounded-xl text-sm flex items-center gap-2 transition-colors btn-secondary" onclick="sendMessage('解释一下什么是RAG技术')">
-              <svg class="w-4 h-4" style="color: #fbbf24;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
-              解释RAG技术
-            </button>
-            <button class="px-4 py-2.5 rounded-xl text-sm flex items-center gap-2 transition-colors btn-secondary" onclick="sendMessage('查看工作区文件')">
-              <svg class="w-4 h-4" style="color: #22d3ee;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
-              查看工作区
-            </button>
-          </div>
-        </div>
-        
-        <div class="flex gap-4 message-animate">
-          <div class="avatar avatar-user">O</div>
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2 mb-1"><span class="font-medium">欧阳广源</span><span class="text-xs text-textMuted">14:32</span></div>
-            <div class="bg-surfaceLight rounded-2xl rounded-tl-none px-4 py-3"><p class="text-textSecondary">帮我分析这个项目的代码结构</p></div>
-          </div>
-        </div>
-        
-        <div class="flex gap-4 message-animate">
-          <div class="avatar" style="background: linear-gradient(135deg, var(--primary), #818cf8); color: white;">X</div>
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2 mb-1"><span class="font-medium">小智</span><span class="text-xs text-textMuted">14:32</span></div>
-            <div class="bg-surfaceLight rounded-2xl rounded-tl-none px-4 py-3 space-y-3">
-              <p class="text-textSecondary">我来分析一下项目的代码结构。这个项目是一个<span class="text-primary">插件化AI助手平台</span>，主要采用以下架构：</p>
-              <div class="bg-surface p-3 rounded-lg">
-                <div class="text-sm font-medium mb-2 text-textPrimary">项目结构</div>
-                <pre class="text-xs text-textSecondary overflow-x-auto">XiaoZhi/
-├── doc/              # 项目文档
-├── src/              # 源代码
-│   ├── backend/      # 后端服务
-│   ├── frontend/     # 前端应用
-│   └── plugins/      # 插件系统
-├── tests/            # 测试文件
-└── README.md         # 项目说明</pre>
-              </div>
-              <div class="flex flex-wrap gap-2">
-                <span class="tag tag-primary">五层架构</span>
-                <span class="tag" style="background: rgba(34, 197, 94, 0.1); color: #22c55e;">插件化设计</span>
-                <span class="tag tag-warning">MCP协议支持</span>
-              </div>
-              <div class="border-t border-border pt-3 mt-3">
-                <div class="text-xs text-textMuted mb-2">你可以继续：</div>
-                <div class="flex flex-wrap gap-2">
-                  <button class="px-3 py-1.5 bg-surface hover:bg-surfaceLighter rounded-lg text-xs transition-colors btn-click" onclick="sendMessage('详细说说插件系统')">详细说说插件系统</button>
-                  <button class="px-3 py-1.5 bg-surface hover:bg-surfaceLighter rounded-lg text-xs transition-colors btn-click" onclick="sendMessage('查看具体某个模块')">查看具体模块</button>
-                </div>
-              </div>
+      <!-- 主内容区改为 flex-col 布局，agent面板内嵌在消息区底部 -->
+      <div id="chatArea" class="flex-1 flex flex-col overflow-hidden">
+        <!-- 消息列表区域 - 可滚动 -->
+        <div id="messagesContainer" class="flex-1 overflow-y-auto p-6 space-y-6 scroll-container">
+          <div class="text-center py-12">
+            <div class="logo-icon mx-auto mb-6" style="width: 5rem; height: 5rem; font-size: 2.25rem;">X</div>
+            <h2 class="text-2xl font-bold mb-2">你好，我是小智</h2>
+            <p class="text-textSecondary max-w-md mx-auto mb-8">一个插件化的 AI 助手，可以帮助你完成代码开发、文档处理、数据分析等多种任务</p>
+            <div class="flex flex-wrap justify-center gap-3 max-w-2xl mx-auto">
+              <button class="px-4 py-2.5 rounded-xl text-sm flex items-center gap-2 transition-colors btn-secondary" onclick="sendMessage('帮我分析这个项目的代码结构')">
+                <svg class="w-4 h-4" style="color: var(--primary);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                分析代码结构
+              </button>
+              <button class="px-4 py-2.5 rounded-xl text-sm flex items-center gap-2 transition-colors btn-secondary" onclick="sendMessage('帮我写一个简单的REST API')">
+                <svg class="w-4 h-4" style="color: #34d399;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+                写REST API
+              </button>
+              <button class="px-4 py-2.5 rounded-xl text-sm flex items-center gap-2 transition-colors btn-secondary" onclick="sendMessage('解释一下什么是RAG技术')">
+                <svg class="w-4 h-4" style="color: #fbbf24;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                解释RAG技术
+              </button>
+              <button class="px-4 py-2.5 rounded-xl text-sm flex items-center gap-2 transition-colors btn-secondary" onclick="sendMessage('查看工作区文件')">
+                <svg class="w-4 h-4" style="color: #22d3ee;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                查看工作区
+              </button>
             </div>
           </div>
         </div>
         
-        <div class="flex gap-4 message-animate">
-          <div class="avatar" style="background: linear-gradient(135deg, var(--primary), #818cf8); color: white;">X</div>
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2 mb-1"><span class="font-medium">小智</span><span class="text-xs text-textMuted">14:33</span></div>
-            <div class="bg-surfaceLight rounded-2xl rounded-tl-none px-4 py-3">
-              <div class="flex items-center gap-3 mb-3"><div class="flex items-center gap-1.5"><div class="status-dot" style="background: var(--primary);"></div><span class="text-sm">正在搜索文件...</span></div></div>
-              <div class="space-y-2">
-                <div class="flex items-center gap-3 p-2 bg-surface rounded-lg hover:bg-surfaceLighter transition-colors cursor-pointer">
-                  <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
-                  <div class="flex-1"><div class="text-sm font-medium">src/backend</div><div class="text-xs text-textMuted">12 个文件</div></div>
-                  <span class="tag tag-primary">主要</span>
-                </div>
-                <div class="flex items-center gap-3 p-2 bg-surface rounded-lg hover:bg-surfaceLighter transition-colors cursor-pointer">
-                  <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
-                  <div class="flex-1"><div class="text-sm font-medium">src/frontend</div><div class="text-xs text-textMuted">8 个文件</div></div>
-                </div>
-                <div class="flex items-center gap-3 p-2 bg-surface rounded-lg hover:bg-surfaceLighter transition-colors cursor-pointer">
-                  <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
-                  <div class="flex-1"><div class="text-sm font-medium">doc</div><div class="text-xs text-textMuted">5 个文件</div></div>
-                </div>
-              </div>
-            </div>
-          </div>
+        <!-- Agent 思考区域 -->
+        <div id="agentThinking" class="hidden space-y-4">
+          <!-- 思考块将动态添加 -->
         </div>
       </div>
       
@@ -610,13 +693,16 @@
           <div class="relative">
             <textarea id="messageInput" placeholder="输入消息，Shift+Enter换行，Enter发送..." aria-label="输入消息" aria-describedby="inputHint" class="w-full bg-surfaceLight border border-border rounded-xl px-4 py-3 pr-24 text-sm resize-none transition-all" rows="1" onkeydown="handleKeyDown(event)" oninput="autoResize(this)"></textarea>
             <div class="absolute right-2 bottom-2 flex items-center gap-1">
+              <button id="stopBtn" onclick="stopGeneration()" class="hidden px-3 py-1.5 bg-warning hover:bg-warning/80 text-white text-sm font-medium rounded-lg transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+              </button>
               <button class="btn-icon" title="附件"><svg class="w-5 h-5 text-textMuted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg></button>
               <button class="btn-icon" title="语音输入"><svg class="w-5 h-5 text-textMuted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg></button>
               <button onclick="sendCurrentMessage()" class="px-3 py-1.5 text-sm font-medium btn-primary">发送</button>
             </div>
           </div>
           <div class="flex items-center justify-between mt-2 text-xs text-textMuted">
-            <span>小智会理解你的意图并选择合适的工具执行</span>
+            <span id="inputHint">小智会理解你的意图并选择合适的工具执行</span>
             <span id="charCount">0 / 2000</span>
           </div>
         </div>
@@ -719,40 +805,326 @@
   </div>
 
   <script>
+    // Agent 模式状态
+    let isAgentMode = false;
+    let isLoading = false;
+    let thoughtsExpanded = true;
+    let selectedModelId = 'qwen35-35b-a3b-fp8';
+    let selectedModelName = 'Qwen 35B';
+    let thoughts = [];
+
     function toggleSidebar() { document.getElementById('sidebar').classList.toggle('sidebar-collapsed'); }
     function togglePluginPanel() { document.getElementById('pluginPanel').classList.toggle('hidden'); }
     function toggleAgentPanel() { alert('智能体选择面板（待实现）'); }
+    
     function autoResize(el) {
       el.style.height = 'auto';
       el.style.height = Math.min(el.scrollHeight, 150) + 'px';
       document.getElementById('charCount').textContent = el.value.length + ' / 2000';
     }
     function handleKeyDown(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendCurrentMessage(); } }
+    
     function sendCurrentMessage() {
       const input = document.getElementById('messageInput');
       const msg = input.value.trim();
-      if (msg) { sendMessage(msg); input.value = ''; autoResize(input); }
+      if (msg) { 
+        if (isAgentMode) {
+          sendAgentMessage(msg);
+        } else {
+          sendMessage(msg);
+        }
+        input.value = ''; 
+        autoResize(input); 
+      }
     }
+    
+    // Agent 模式切换
+    function toggleAgentMode() {
+      isAgentMode = !isAgentMode;
+      const btn = document.getElementById('agentModeBtn');
+      const text = document.getElementById('agentModeText');
+      const agentThinking = document.getElementById('agentThinking');
+      const inputHint = document.getElementById('inputHint');
+      
+      if (isAgentMode) {
+        btn.classList.add('agent-mode-indicator');
+        btn.style.background = 'linear-gradient(135deg, var(--primary), var(--secondary))';
+        btn.style.color = 'white';
+        text.textContent = 'Agent 模式';
+        agentThinking.classList.remove('hidden');
+        inputHint.textContent = '输入任务指令，Agent 将自主规划和执行';
+      } else {
+        btn.classList.remove('agent-mode-indicator');
+        btn.style.background = '';
+        btn.style.color = '';
+        text.textContent = '普通模式';
+        agentThinking.classList.add('hidden');
+        inputHint.textContent = '小智会理解你的意图并选择合适的工具执行';
+      }
+    }
+    
+    // 模型选择
+    function toggleModelDropdown() {
+      document.getElementById('modelDropdown').classList.toggle('hidden');
+    }
+    
+    function selectModel(id, name) {
+      selectedModelId = id;
+      selectedModelName = name;
+      document.getElementById('selectedModelName').textContent = name;
+      document.getElementById('modelDropdown').classList.add('hidden');
+    }
+    
+    // 添加思考块 - Claude Code/Trae 风格
+    let thinkingBlockId = null;
+    let currentStep = 0;
+    let totalSteps = 6;
+    
+    function createThinkingBlock() {
+      const agentThinking = document.getElementById('agentThinking');
+      thinkingBlockId = 'thinking-' + Date.now();
+      currentStep = 0;
+      
+      const block = document.createElement('div');
+      block.id = thinkingBlockId;
+      block.className = 'thinking-block';
+      
+      block.innerHTML = `
+        <div class="thinking-header" onclick="toggleThinkingBlock()">
+          <div class="thinking-icon thinking">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673m-2.046-5.278a8.25 8.25 0 1120.845 10.837M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 25 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+          </div>
+          <span class="thinking-label">Agent 思考过程</span>
+          <span class="thinking-progress">0/${totalSteps} 步</span>
+          <span class="thinking-dots ml-2"><span></span><span></span></span>
+          <button class="thinking-toggle ml-auto" onclick="event.stopPropagation(); toggleThinkingBlock()">
+            <span class="thinking-toggle-text">展开</span>
+            <svg class="thinking-toggle-icon w-3 h-3 inline transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+          </button>
+        </div>
+        <div class="thinking-body">
+          <div class="thinking-content" id="thinkingContent">
+            <span class="streaming-cursor"></span>
+          </div>
+        </div>
+      `;
+      
+      agentThinking.appendChild(block);
+      return block;
+    }
+    
+    function updateThinkingProgress() {
+      const block = document.getElementById(thinkingBlockId);
+      if (!block) return;
+      const progress = block.querySelector('.thinking-progress');
+      if (progress) {
+        progress.textContent = `${currentStep}/${totalSteps} 步`;
+      }
+    }
+    
+    function appendThinkingContent(text) {
+      const content = document.getElementById('thinkingContent');
+      if (!content) return;
+      const cursor = content.querySelector('.streaming-cursor');
+      const textNode = document.createTextNode(text);
+      content.insertBefore(textNode, cursor);
+    }
+    
+    function finalizeThinkingContent() {
+      const content = document.getElementById('thinkingContent');
+      if (!content) return;
+      const cursor = content.querySelector('.streaming-cursor');
+      if (cursor) cursor.remove();
+    }
+    
+    function toggleThinkingBlock() {
+      const block = document.getElementById(thinkingBlockId);
+      if (!block) return;
+      block.classList.toggle('expanded');
+      const toggleText = block.querySelector('.thinking-toggle-text');
+      if (toggleText) {
+        toggleText.textContent = block.classList.contains('expanded') ? '收起' : '展开';
+      }
+    }
+    
+    function setThinkingComplete() {
+      const block = document.getElementById(thinkingBlockId);
+      if (!block) return;
+      const dots = block.querySelector('.thinking-dots');
+      if (dots) {
+        dots.innerHTML = '<svg class="w-4 h-4 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>';
+        dots.style.background = 'none';
+      }
+      const progress = block.querySelector('.thinking-progress');
+      if (progress) {
+        progress.textContent = '完成';
+        progress.style.color = 'var(--success)';
+      }
+    }
+    
+    // 添加确认请求
+    function addConfirmRequest(confirmId, toolName, args) {
+      const container = document.getElementById('confirmRequests');
+      const list = document.getElementById('confirmRequestsList');
+      container.classList.remove('hidden');
+      
+      const card = document.createElement('div');
+      card.className = 'confirm-request-card';
+      card.id = 'confirm-' + confirmId;
+      card.innerHTML = `
+        <div class="flex items-center gap-2 mb-1">
+          <span class="text-sm font-medium text-error">${toolName}</span>
+          <span class="text-xs text-textMuted">需要确认</span>
+        </div>
+        <div class="text-xs text-textSecondary bg-surface rounded p-2 mb-2">${escapeHtml(JSON.stringify(args, null, 2))}</div>
+        <div class="confirm-actions">
+          <button onclick="approveConfirm('${confirmId}')" class="btn-approve">批准</button>
+          <button onclick="rejectConfirm('${confirmId}')" class="btn-reject">拒绝</button>
+        </div>
+      `;
+      list.appendChild(card);
+    }
+    
+    function approveConfirm(confirmId) {
+      const card = document.getElementById('confirm-' + confirmId);
+      if (card) card.remove();
+      // 实际项目中这里调用 API
+      alert('已批准: ' + confirmId);
+    }
+    
+    function rejectConfirm(confirmId) {
+      const card = document.getElementById('confirm-' + confirmId);
+      if (card) card.remove();
+      // 实际项目中这里调用 API
+      alert('已拒绝: ' + confirmId);
+    }
+    
+    // Agent 发送消息
+    function sendAgentMessage(msg) {
+      const messagesContainer = document.getElementById('messagesContainer');
+      const agentThinking = document.getElementById('agentThinking');
+      const now = new Date();
+      const time = now.toLocaleTimeString('zh-CN', {hour:'2-digit', minute:'2-digit'});
+      
+      // 添加用户消息
+      const userDiv = document.createElement('div');
+      userDiv.className = 'flex gap-4 message-animate';
+      userDiv.innerHTML = '<div class="avatar avatar-user">O</div><div class="flex-1 min-w-0"><div class="flex items-center gap-2 mb-1"><span class="font-medium">欧阳广源</span><span class="text-xs text-textMuted">' + time + '</span></div><div class="bg-surfaceLight rounded-2xl rounded-tl-none px-4 py-3"><p class="text-textSecondary">' + escapeHtml(msg) + '</p></div></div>';
+      messagesContainer.appendChild(userDiv);
+      
+      // 清空之前的思考，创建新的思考块
+      agentThinking.innerHTML = '';
+      createThinkingBlock();
+      agentThinking.classList.remove('hidden');
+      isLoading = true;
+      
+      // 模拟 Agent 思考过程
+      simulateAgentThinking(msg, time);
+    }
+    
+    // 模拟 Agent 思考过程 - Claude Code/Trae 风格
+    function simulateAgentThinking(msg, time) {
+      currentStep = 0;
+      const steps = [
+        { type: 'thinking', icon: 'thinking', label: '分析请求', content: `用户想要: ${msg}\n\n我将分析这个请求并制定执行计划...` },
+        { type: 'action', icon: 'action', label: '搜索文件', content: `正在调用工具: <span class="tool-name">file_search</span>\n关键词: "${msg}"` },
+        { type: 'observation', icon: 'observation', label: '搜索结果', content: `<span class="result-success">✓ 找到 5 个相关文件</span>\n\n- src/agent/executor.ts\n- src/agent/controller.ts\n- src/tools/registry.ts\n- src/chat/service.ts\n- src/chat/controller.ts` },
+        { type: 'thinking', icon: 'thinking', label: '制定计划', content: `分析完成。\n\n策略: 读取关键文件来分析代码结构，提取核心模块关系。` },
+        { type: 'action', icon: 'action', label: '读取文件', content: `正在调用工具: <span class="tool-name">file_read</span>\n文件: src/agent/executor.ts` },
+        { type: 'observation', icon: 'observation', label: '代码分析', content: `<span class="result-success">✓ 分析完成</span>\n\n关键发现:\n- AgentExecutor 处理思考循环\n- ToolRegistry 管理工具注册\n- 工具分为 L1-L5 风险等级` }
+      ];
+      
+      totalSteps = steps.length;
+      
+      // 模拟流式输出
+      let stepIndex = 0;
+      let charIndex = 0;
+      let currentContent = '';
+      
+      function processNextChar() {
+        if (!isLoading || stepIndex >= steps.length) {
+          // 完成所有步骤
+          finalizeThinkingContent();
+          setThinkingComplete();
+          showFinalResponse(time);
+          return;
+        }
+        
+        const step = steps[stepIndex];
+        
+        if (charIndex === 0) {
+          // 新步骤开始
+          currentStep = stepIndex + 1;
+          updateThinkingProgress();
+        }
+        
+        if (charIndex < step.content.length) {
+          // 逐字添加内容
+          currentContent += step.content[charIndex];
+          appendThinkingContent(step.content[charIndex]);
+          charIndex++;
+          setTimeout(processNextChar, 5); // 打字机效果
+        } else {
+          // 步骤完成
+          stepIndex++;
+          charIndex = 0;
+          currentContent = '';
+          if (stepIndex < steps.length) {
+            appendThinkingContent('\n\n');
+          }
+          setTimeout(processNextChar, 300); // 步骤间停顿
+        }
+      }
+      
+      setTimeout(processNextChar, 500);
+    }
+    
+    function showFinalResponse(time) {
+      const messagesContainer = document.getElementById('messagesContainer');
+      isLoading = false;
+      
+      const aiDiv = document.createElement('div');
+      aiDiv.className = 'flex gap-4 message-animate';
+      aiDiv.innerHTML = '<div class="avatar" style="background: linear-gradient(135deg, var(--primary), #818cf8); color: white;">X</div><div class="flex-1 min-w-0"><div class="flex items-center gap-2 mb-1"><span class="font-medium">小智</span><span class="text-xs text-textMuted">' + time + '</span></div><div class="bg-surfaceLight rounded-2xl rounded-tl-none px-4 py-3"><p class="text-textSecondary">我已经完成了对项目代码结构的分析。这是一个基于 NestJS 的插件化 AI 助手平台，采用了分层架构设计。</p></div></div>';
+      messagesContainer.appendChild(aiDiv);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+    
+    function stopGeneration() {
+      isLoading = false;
+      alert('已停止生成');
+    }
+    
     function sendMessage(msg) {
-      const chatArea = document.getElementById('chatArea');
+      const messagesContainer = document.getElementById('messagesContainer');
       const now = new Date();
       const time = now.toLocaleTimeString('zh-CN', {hour:'2-digit', minute:'2-digit'});
       const userDiv = document.createElement('div');
       userDiv.className = 'flex gap-4 message-animate';
       userDiv.innerHTML = '<div class="avatar avatar-user">O</div><div class="flex-1 min-w-0"><div class="flex items-center gap-2 mb-1"><span class="font-medium">欧阳广源</span><span class="text-xs text-textMuted">' + time + '</span></div><div class="bg-surfaceLight rounded-2xl rounded-tl-none px-4 py-3"><p class="text-textSecondary">' + escapeHtml(msg) + '</p></div></div>';
-      chatArea.appendChild(userDiv);
-      chatArea.scrollTop = chatArea.scrollHeight;
+      messagesContainer.appendChild(userDiv);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
       setTimeout(() => {
         const aiDiv = document.createElement('div');
         aiDiv.className = 'flex gap-4 message-animate';
         aiDiv.innerHTML = '<div class="avatar" style="background: linear-gradient(135deg, var(--primary), #818cf8); color: white;">X</div><div class="flex-1 min-w-0"><div class="flex items-center gap-2 mb-1"><span class="font-medium">小智</span><span class="text-xs text-textMuted">' + time + '</span></div><div class="bg-surfaceLight rounded-2xl rounded-tl-none px-4 py-3"><p class="text-textSecondary">正在思考...</p></div></div>';
-        chatArea.appendChild(aiDiv);
-        chatArea.scrollTop = chatArea.scrollHeight;
+        messagesContainer.appendChild(aiDiv);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
       }, 500);
     }
     function escapeHtml(text) { const d = document.createElement('div'); d.textContent = text; return d.innerHTML; }
     function closeConfirmModal() { document.getElementById('confirmModal').classList.add('hidden'); }
     function confirmAction() { closeConfirmModal(); alert('操作已确认执行'); }
+    
+    // 点击外部关闭模型下拉框
+    document.addEventListener('click', (e) => {
+      const dropdown = document.getElementById('modelDropdown');
+      const btn = e.target.closest('button[onclick="toggleModelDropdown()"]');
+      if (!btn && !dropdown.contains(e.target)) {
+        dropdown.classList.add('hidden');
+      }
+    });
+    
     document.getElementById('messageInput').focus();
   </script>
 </body>
