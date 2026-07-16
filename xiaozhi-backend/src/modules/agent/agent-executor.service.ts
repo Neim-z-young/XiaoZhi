@@ -80,8 +80,28 @@ export class AgentExecutor {
 
     for (let i = 0; i < maxIterations; i++) {
       this.logger.log(`Iteration ${i + 1}: Starting think()`);
-      
-      const thought = await this.think(messages, config.model);
+
+      // 使用流式思考
+      let thought = '';
+      let lastSentLength = 0;
+
+      for await (const chunk of this.aiGateway.stream({
+        model: config.model,
+        messages: messages.map(m => ({
+          role: m.role as 'user' | 'assistant' | 'system',
+          content: m.content,
+        })),
+        temperature: 0.7,
+      })) {
+        thought += chunk.content;
+        // 只发送新增的部分
+        if (thought.length > lastSentLength) {
+          const newContent = thought.substring(lastSentLength);
+          context.onEvent({ type: 'thought', content: newContent });
+          lastSentLength = thought.length;
+        }
+      }
+
       this.logger.log(`Iteration ${i + 1}: thought = "${thought.substring(0, 100)}..."`);
       
       const action = this.parseAction(thought);
@@ -96,9 +116,6 @@ export class AgentExecutor {
         yield doneEvent;
         break;
       }
-
-      yield { type: 'thought', content: thought };
-      context.onEvent({ type: 'thought', content: thought });
 
       const tool = this.toolRegistry.getTool(action.name);
       if (!tool) {
@@ -159,39 +176,6 @@ export class AgentExecutor {
     }
     
     this.logger.log('AgentExecutor finished');
-  }
-
-  private async think(
-    messages: Array<{ role: string; content: string }>,
-    model: string,
-  ): Promise<string> {
-    this.logger.log(`think() called with model: ${model}, message count: ${messages.length}`);
-    try {
-      // 添加超时机制
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('AI request timeout (60s)')), 60000);
-      });
-
-      const response = await Promise.race([
-        this.aiGateway.complete({
-          model,
-          messages: messages.map(m => ({
-            role: m.role as 'user' | 'assistant' | 'system',
-            content: m.content,
-          })),
-          temperature: 0.7,
-        }),
-        timeoutPromise,
-      ]);
-
-      this.logger.log(`think() AI response: ${JSON.stringify(response)}`);
-      const content = typeof response === 'string' ? response : (response.content || '');
-      this.logger.log(`think() extracted content: ${content.substring(0, 200)}`);
-      return content;
-    } catch (error: any) {
-      this.logger.error(`think() AI error: ${error.message}`);
-      return `Error: ${error.message}`;
-    }
   }
 
   private parseAction(thought: string): { name: string; args: Record<string, any> } | null {

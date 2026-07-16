@@ -35,3 +35,5 @@ target/*
 ### node_modules
 xiaozhi-backend/node_modules/*
 xiaozhi-frontend/node_modules/*
+xiaozhi-backend/dist/*
+xiaozhi-frontend/dist/*

@@ -16,10 +16,7 @@ export const chatApi = {
   streamChat: (
     sessionId: string,
     message: string,
-    onMessage: (content: string) => void,
     model?: string,
-    onComplete?: () => void,
-    onError?: (error: Event) => void,
   ) => {
     const token = localStorage.getItem('auth-storage');
     let tokenValue = '';
@@ -39,32 +36,6 @@ export const chatApi = {
     const eventSource = new EventSource(
       `/api/chat/${sessionId}/stream?${params.toString()}`
     );
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.content !== undefined) {
-          // 检查是否是错误消息
-          if (data.content.startsWith('错误:')) {
-            eventSource.close();
-            onError?.(data.content);
-            return;
-          }
-          onMessage(data.content);
-        }
-        if (data.done) {
-          eventSource.close();
-          onComplete?.();
-        }
-      } catch {
-        // Ignore parse errors
-      }
-    };
-
-    eventSource.onerror = (error) => {
-      eventSource.close();
-      onError?.(error);
-    };
 
     return eventSource;
   },

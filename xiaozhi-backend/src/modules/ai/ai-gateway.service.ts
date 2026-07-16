@@ -25,7 +25,7 @@ export class AIGatewayService {
 
       let adapter: AIAdapter;
       
-      if (model.provider === 'openai') {
+      if (model.provider === 'openai' || model.provider === 'vllm') {
         adapter = new OpenAIAdapter(model);
       } else if (model.provider === 'anthropic') {
         adapter = new ClaudeAdapter(model);

@@ -1,7 +1,7 @@
 export interface AIModelConfig {
   id: string;
   name: string;
-  provider: 'openai' | 'anthropic' | 'custom';
+  provider: 'openai' | 'anthropic' | 'custom' | 'vllm';
   apiKey?: string;
   apiKeyEnv?: string;
   baseURL: string;

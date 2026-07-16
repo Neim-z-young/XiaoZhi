@@ -29,7 +29,11 @@ export const useChatStore = create<ChatStore>((set) => ({
   updateStreamingMessage: (content) => set((state) => ({
     streamingContent: state.streamingContent + content,
   })),
-  setMessages: (messages) => set({ messages }),
+  setMessages: (messagesOrUpdater) => set((state) => ({
+    messages: typeof messagesOrUpdater === 'function'
+      ? messagesOrUpdater(state.messages)
+      : messagesOrUpdater
+  })),
   setIsStreaming: (streaming) => set({ isStreaming: streaming }),
   setStreamingContent: (content) => set({ streamingContent: content }),
   clearMessages: () => set({ messages: [], streamingContent: '' }),

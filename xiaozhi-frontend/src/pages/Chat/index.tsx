@@ -173,16 +173,30 @@ export function ChatPage() {
         const data: AgentStreamEvent = JSON.parse(event.data);
         
         if (data.type === 'thought') {
-          stepIndex++;
-          setTotalSteps(prev => prev + 1);
-          setCurrentStep(stepIndex);
-          setStreamingContent(data.content || '');
-          setThoughtSteps(prev => [...prev, {
-            id: `step-${Date.now()}-${stepIndex}`,
-            type: 'thinking',
-            label: stepLabels.thinking,
-            content: data.content || '',
-          }]);
+          // 累积思考内容到当前步骤，而不是创建新步骤
+          setThoughtSteps(prev => {
+            // 如果最后一个是思考步骤，追加内容
+            if (prev.length > 0 && prev[prev.length - 1].type === 'thinking') {
+              const updated = [...prev];
+              const lastIdx = updated.length - 1;
+              updated[lastIdx] = {
+                ...updated[lastIdx],
+                content: updated[lastIdx].content + (data.content || ''),
+              };
+              return updated;
+            }
+            // 否则创建新的思考步骤
+            stepIndex++;
+            setTotalSteps(prev => prev + 1);
+            setCurrentStep(stepIndex);
+            setStreamingContent(data.content || '');
+            return [...prev, {
+              id: `step-${Date.now()}-${stepIndex}`,
+              type: 'thinking',
+              label: stepLabels.thinking,
+              content: data.content || '',
+            }];
+          });
         } else if (data.type === 'action') {
           stepIndex++;
           setTotalSteps(prev => prev + 1);
@@ -273,6 +287,18 @@ export function ChatPage() {
     };
     addMessage(tempUserMsg);
 
+    // 创建空的 assistant 消息用于流式更新
+    let accumulatedContent = '';
+    const assistantMsgId = `assistant-${Date.now()}`;
+    const tempAssistantMsg: Message = {
+      id: assistantMsgId,
+      sessionId: currentSession?.id || 'default',
+      role: 'assistant',
+      content: '',
+      createdAt: new Date().toISOString(),
+    };
+    addMessage(tempAssistantMsg);
+
     let hasErrored = false;
 
     try {
@@ -280,7 +306,6 @@ export function ChatPage() {
         eventSourceRef.current = chatApi.streamChat(
           currentSession.id,
           userMessage,
-          (chunk) => {},
           selectedModel
         );
 
@@ -288,6 +313,9 @@ export function ChatPage() {
           if (hasErrored) return;
           hasErrored = true;
           eventSourceRef.current?.close();
+          // 移除空的 assistant 消息
+          setMessages(prev => prev.filter(m => m.id !== assistantMsgId));
+          // 回退到非流式
           chatApi.sendMessage({
             sessionId: currentSession.id,
             message: userMessage,
@@ -312,6 +340,10 @@ export function ChatPage() {
           try {
             const data = JSON.parse(event.data);
             if (data.content?.startsWith('错误:')) {
+              hasErrored = true;
+              eventSourceRef.current?.close();
+              // 移除空的 assistant 消息
+              setMessages(prev => prev.filter(m => m.id !== assistantMsgId));
               if (data.content.includes('429') || data.content.includes('Too Many Requests')) {
                 addMessage({
                   id: `error-${Date.now()}`,
@@ -330,8 +362,21 @@ export function ChatPage() {
                 });
               }
               setIsLoading(false);
+            } else if (data.content !== undefined) {
+              // 累积流式内容
+              accumulatedContent += data.content;
+              // 更新 assistant 消息
+              setMessages(prev => {
+                const updated = [...prev];
+                const lastIdx = updated.findIndex(m => m.id === assistantMsgId);
+                if (lastIdx !== -1) {
+                  updated[lastIdx] = { ...updated[lastIdx], content: accumulatedContent };
+                }
+                return updated;
+              });
             }
             if (data.done) {
+              eventSourceRef.current?.close();
               setIsLoading(false);
             }
           } catch {}
@@ -387,7 +432,7 @@ export function ChatPage() {
           </div>
         )}
 
-        {messages.map((msg) => (
+        {(messages || []).map((msg) => (
           <div
             key={msg.id}
             className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
