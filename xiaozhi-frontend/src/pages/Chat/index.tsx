@@ -30,14 +30,16 @@ export function ChatPage() {
   const [models, setModels] = useState<AIModelConfig[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>('');
   const [showModelDropdown, setShowModelDropdown] = useState(false);
-  const [isAgentMode, setIsAgentMode] = useState(false);
+  const [isAgentMode, setIsAgentMode] = useState(true);
   const [thoughtSteps, setThoughtSteps] = useState<ThoughtStep[]>([]);
+  const thoughtStepsRef = useRef<ThoughtStep[]>([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [totalSteps, setTotalSteps] = useState(0);
   const [isThinkingComplete, setIsThinkingComplete] = useState(false);
   const [showThinking, setShowThinking] = useState(true);
   const [pendingConfirmations, setPendingConfirmations] = useState<Array<{ confirmId: string; toolName: string; args: any }>>([]);
   const [streamingContent, setStreamingContent] = useState('');
+  const [collapsedThinking, setCollapsedThinking] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const thinkingContentRef = useRef<HTMLDivElement>(null);
@@ -134,11 +136,13 @@ export function ChatPage() {
 
     // 重置思考状态
     setThoughtSteps([]);
+    thoughtStepsRef.current = [];
     setCurrentStep(0);
     setTotalSteps(0);
     setIsThinkingComplete(false);
     setStreamingContent('');
     setShowThinking(true);
+    // 不再清空折叠状态，保持旧消息的折叠状态
 
     // 添加用户消息到列表
     const tempUserMsg: Message = {
@@ -171,6 +175,9 @@ export function ChatPage() {
     eventSource.onmessage = (event) => {
       try {
         const data: AgentStreamEvent = JSON.parse(event.data);
+
+        // 使用唯一 ID 生成器
+        const generateId = () => `step-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
         
         if (data.type === 'thought') {
           // 累积思考内容到当前步骤，而不是创建新步骤
@@ -183,6 +190,7 @@ export function ChatPage() {
                 ...updated[lastIdx],
                 content: updated[lastIdx].content + (data.content || ''),
               };
+              thoughtStepsRef.current = updated;
               return updated;
             }
             // 否则创建新的思考步骤
@@ -190,24 +198,30 @@ export function ChatPage() {
             setTotalSteps(prev => prev + 1);
             setCurrentStep(stepIndex);
             setStreamingContent(data.content || '');
-            return [...prev, {
-              id: `step-${Date.now()}-${stepIndex}`,
-              type: 'thinking',
+            const newStep = {
+              id: generateId(),
+              type: 'thinking' as const,
               label: stepLabels.thinking,
               content: data.content || '',
-            }];
+            };
+            thoughtStepsRef.current = [...prev, newStep];
+            return [...prev, newStep];
           });
         } else if (data.type === 'action') {
           stepIndex++;
           setTotalSteps(prev => prev + 1);
           setCurrentStep(stepIndex);
           setStreamingContent(`正在调用工具: ${data.tool}\n`);
-          setThoughtSteps(prev => [...prev, {
-            id: `step-${Date.now()}-${stepIndex}`,
-            type: 'action',
+          const newStep = {
+            id: generateId(),
+            type: 'action' as const,
             label: stepLabels.action,
-            content: `正在调用工具: ${data.tool}`,
-          }]);
+            content: data.content || `正在调用工具: ${data.tool}`,
+          };
+          setThoughtSteps(prev => {
+            thoughtStepsRef.current = [...prev, newStep];
+            return [...prev, newStep];
+          });
         } else if (data.type === 'confirm_request') {
           // 添加待确认项
           if (data.confirmId && data.tool) {
@@ -227,35 +241,54 @@ export function ChatPage() {
           setTotalSteps(prev => prev + 1);
           setCurrentStep(stepIndex);
           setStreamingContent(data.content || '');
-          setThoughtSteps(prev => [...prev, {
-            id: `step-${Date.now()}-${stepIndex}`,
-            type: 'observation',
+          const newStep = {
+            id: generateId(),
+            type: 'observation' as const,
             label: stepLabels.observation,
             content: data.content || '',
-          }]);
+          };
+          setThoughtSteps(prev => {
+            thoughtStepsRef.current = [...prev, newStep];
+            return [...prev, newStep];
+          });
         } else if (data.type === 'done') {
           setIsThinkingComplete(true);
           setStreamingContent('');
+          // 使用 ref 获取最新的思考过程
+          const currentSteps = thoughtStepsRef.current;
+          const msgId = `agent-${Date.now()}`;
           addMessage({
-            id: `agent-${Date.now()}`,
+            id: msgId,
             sessionId: currentSession?.id || 'default',
             role: 'assistant',
             content: data.content || '',
             createdAt: new Date().toISOString(),
+            thinkingSteps: currentSteps,
           });
+          // 思考完成，自动折叠思考过程
+          setCollapsedThinking(prev => new Set(prev).add(msgId));
           setIsLoading(false);
+          // 清空思考过程
+          setThoughtSteps([]);
+          thoughtStepsRef.current = [];
           eventSource.close();
         } else if (data.type === 'error') {
           setIsThinkingComplete(true);
           setStreamingContent('');
+          const currentSteps = thoughtStepsRef.current;
+          const msgId = `error-${Date.now()}`;
           addMessage({
-            id: `error-${Date.now()}`,
+            id: msgId,
             sessionId: currentSession?.id || 'default',
             role: 'assistant',
             content: data.content || '发生错误',
             createdAt: new Date().toISOString(),
+            thinkingSteps: currentSteps,
           });
+          setCollapsedThinking(prev => new Set(prev).add(msgId));
           setIsLoading(false);
+          setThoughtSteps([]);
+          thoughtStepsRef.current = [];
           eventSource.close();
         }
       } catch (error) {
@@ -432,23 +465,96 @@ export function ChatPage() {
           </div>
         )}
 
-        {(messages || []).map((msg) => (
-          <div
-            key={msg.id}
-            className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
-          >
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-white font-bold shrink-0">
-              {msg.role === 'user' ? 'U' : 'X'}
+        {(messages || []).map((msg) => {
+          // 根据消息内容判断类型
+          const isEmpty = !msg.content || msg.content.trim() === '';
+          const isWarning = isEmpty || msg.content.includes('抱歉') || msg.content.includes('警告') || msg.content.includes('错误');
+          const isSystem = msg.role === 'system';
+          // 空内容显示为警告提示
+          const displayContent = isEmpty ? '抱歉，我没有获取到有效的内容。请稍后重试，或者尝试更具体地描述您的需求。' : msg.content;
+
+          return (
+            <div key={msg.id}>
+              <div className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold shrink-0 ${
+                  msg.role === 'user' ? 'bg-primary' : isWarning ? 'bg-amber-500' : isSystem ? 'bg-gray-500' : 'bg-primary'
+                }`}>
+                  {msg.role === 'user' ? 'U' : isWarning ? '!' : 'X'}
+                </div>
+                <div className={`max-w-[70%] rounded-2xl px-4 py-3 ${
+                  msg.role === 'user'
+                    ? 'bg-primary text-white rounded-tr-none'
+                    : isWarning
+                    ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-tl-none'
+                    : isSystem
+                    ? 'bg-gray-100 text-gray-600 rounded-tl-none'
+                    : 'bg-surface-light text-textPrimary rounded-tl-none'
+                }`}>
+                  <p className="whitespace-pre-wrap">{displayContent}</p>
+                </div>
+              </div>
+              {/* 消息附带的思考过程 */}
+              {msg.role === 'assistant' && msg.thinkingSteps && msg.thinkingSteps.length > 0 && (
+                <div className="mt-2 ml-11 rounded-xl overflow-hidden border border-border bg-surface">
+                  <div
+                    className="px-3 py-2 border-b border-border bg-surface-light flex items-center justify-between cursor-pointer hover:bg-border/50"
+                    onClick={() => {
+                      setCollapsedThinking(prev => {
+                        const next = new Set(prev);
+                        if (next.has(msg.id)) {
+                          next.delete(msg.id);
+                        } else {
+                          next.add(msg.id);
+                        }
+                        return next;
+                      });
+                    }}
+                  >
+                    <span className="text-xs font-medium text-textSecondary">思考过程</span>
+                    <span className="text-xs text-textMuted">
+                      {collapsedThinking.has(msg.id) ? '▶' : '▼'}
+                    </span>
+                  </div>
+                  {!collapsedThinking.has(msg.id) && (
+                    <div>
+                      <div className="px-3 py-2">
+                        {msg.thinkingSteps.map((step, idx) => (
+                          <div key={idx} className="mb-2 last:mb-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={`text-xs font-medium ${
+                                step.type === 'thinking' ? 'text-primary'
+                                  : step.type === 'action' ? 'text-warning'
+                                  : 'text-success'
+                              }`}>
+                                {step.label}
+                              </span>
+                            </div>
+                            <pre className="text-xs text-textSecondary whitespace-pre-wrap font-mono leading-relaxed bg-surface-light rounded-lg p-2">
+                              {typeof step.content === 'string' ? step.content : JSON.stringify(step.content)}
+                            </pre>
+                          </div>
+                        ))}
+                      </div>
+                      {/* 底部折叠按钮 */}
+                      <div
+                        className="px-3 py-2 border-t border-border bg-surface-light flex items-center justify-center cursor-pointer hover:bg-border/50 text-xs text-textMuted"
+                        onClick={() => {
+                          setCollapsedThinking(prev => {
+                            const next = new Set(prev);
+                            next.add(msg.id);
+                            return next;
+                          });
+                        }}
+                      >
+                        <span>收起 ▲</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-            <div className={`max-w-[70%] rounded-2xl px-4 py-3 ${
-              msg.role === 'user' 
-                ? 'bg-primary text-white rounded-tr-none' 
-                : 'bg-surface-light text-textPrimary rounded-tl-none'
-            }`}>
-              <p className="whitespace-pre-wrap">{msg.content}</p>
-            </div>
-          </div>
-        ))}
+          );
+        })}
 
         {isLoading && !isAgentMode && (
           <div className="flex gap-3">
@@ -467,8 +573,8 @@ export function ChatPage() {
 
         <div ref={messagesEndRef} />
 
-        {/* Agent 思考过程 - Claude Code/Trae 风格 */}
-        {isAgentMode && (thoughtSteps.length > 0 || streamingContent) && (
+        {/* Agent 思考过程 - 仅在加载过程中显示 */}
+        {isAgentMode && isLoading && !isThinkingComplete && (thoughtSteps.length > 0 || streamingContent) && (
           <div className="mt-4 rounded-xl overflow-hidden border border-border bg-surface">
             {/* 思考头部 */}
             <div
@@ -535,7 +641,7 @@ export function ChatPage() {
                       </span>
                     </div>
                     <pre className="text-xs text-textSecondary whitespace-pre-wrap font-mono leading-relaxed bg-surface-light rounded-lg p-3">
-                      {step.content}
+                      {typeof step.content === 'string' ? step.content : JSON.stringify(step.content)}
                     </pre>
                   </div>
                 ))}
@@ -544,7 +650,7 @@ export function ChatPage() {
                 {streamingContent && !isThinkingComplete && (
                   <div className="mt-2">
                     <pre className="text-xs text-textSecondary whitespace-pre-wrap font-mono leading-relaxed">
-                      {streamingContent}
+                      {typeof streamingContent === 'string' ? streamingContent : JSON.stringify(streamingContent)}
                       <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-1"></span>
                     </pre>
                   </div>

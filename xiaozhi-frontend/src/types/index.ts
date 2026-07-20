@@ -48,6 +48,11 @@ export interface Message {
   feedback?: 'like' | 'dislike';
   feedbackComment?: string;
   createdAt: string;
+  thinkingSteps?: Array<{
+    type: 'thinking' | 'action' | 'observation';
+    label: string;
+    content: string;
+  }>;
 }
 
 export interface Workspace {

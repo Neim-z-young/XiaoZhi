@@ -5,6 +5,7 @@ import { AgentsPage } from './pages/Agents';
 import { PluginsPage } from './pages/Plugins';
 import { SettingsPage } from './pages/Settings';
 import { LoginPage } from './pages/Login';
+import { McpServersPage } from './pages/McpServers';
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
         <Route path="agents" element={<AgentsPage />} />
         <Route path="plugins" element={<PluginsPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="mcp-servers" element={<McpServersPage />} />
       </Route>
     </Routes>
   );

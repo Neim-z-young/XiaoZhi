@@ -26,6 +26,7 @@ import { Session } from './entities/session.entity';
 import { Message } from './entities/message.entity';
 import { Workspace } from './entities/workspace.entity';
 import { KnowledgeBase } from './entities/knowledge-base.entity';
+import { McpServer } from './entities/mcp-server.entity';
 
 @Module({
   imports: [
@@ -40,7 +41,7 @@ import { KnowledgeBase } from './entities/knowledge-base.entity';
             type: 'sqljs',
             location: 'xiaozhi',
             autoSave: true,
-            entities: [User, Agent, Plugin, Session, Message, Workspace, KnowledgeBase],
+            entities: [User, Agent, Plugin, Session, Message, Workspace, KnowledgeBase, McpServer],
             synchronize: true,
             logging: false,
           };
@@ -54,7 +55,7 @@ import { KnowledgeBase } from './entities/knowledge-base.entity';
           username: configService.get('database.username'),
           password: configService.get('database.password'),
           database: configService.get('database.database'),
-          entities: [User, Agent, Plugin, Session, Message, Workspace, KnowledgeBase],
+          entities: [User, Agent, Plugin, Session, Message, Workspace, KnowledgeBase, McpServer],
           synchronize: true,
           logging: false,
         };

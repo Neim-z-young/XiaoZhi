@@ -25,11 +25,18 @@ export interface ToolCall {
   timestamp: Date;
 }
 
+export interface ExecutionDetails {
+  terminal: string;
+  command: string;
+  cwd?: string;
+}
+
 export interface ToolResult {
   success: boolean;
   content?: string;
   error?: string;
   logs?: string[];
+  executionDetails?: ExecutionDetails;
 }
 
 @Injectable()
@@ -89,6 +96,10 @@ export class ToolRegistry {
     // L1/L2 直接执行
     try {
       const result = await tool.handler(args);
+      // 如果 handler 返回的是 ToolResult 格式，直接使用；否则包装
+      if (result && typeof result === 'object' && 'success' in result) {
+        return result as ToolResult;
+      }
       return { success: true, content: result };
     } catch (error) {
       return { success: false, error: error.message };

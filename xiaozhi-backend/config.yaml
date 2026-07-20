@@ -69,3 +69,14 @@ models:
 vector:
   dimension: 1536
   provider: pgvector
+
+# MCP 服务器配置
+mcp:
+  # 默认启用的 MCP 服务器
+  servers:
+    # 示例：文件系统服务器（默认不启用，运行时通过 API 添加）
+    - id: filesystem
+      name: Filesystem
+      command: npx
+      args: ["-y", "@modelcontextprotocol/server-filesystem", "D:\\project"]
+      enabled: false

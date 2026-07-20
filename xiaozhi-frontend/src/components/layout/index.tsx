@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
-import { MessageSquare, Bot, Puzzle, Settings, ChevronLeft, ChevronRight } from 'lucide-react';
+import { MessageSquare, Bot, Puzzle, Settings, ChevronLeft, ChevronRight, Server } from 'lucide-react';
 
 const navItems = [
   { path: '/chat', icon: MessageSquare, label: '对话' },
   { path: '/agents', icon: Bot, label: '智能体' },
   { path: '/plugins', icon: Puzzle, label: '插件' },
+  { path: '/mcp-servers', icon: Server, label: 'MCP' },
   { path: '/settings', icon: Settings, label: '设置' },
 ];
 

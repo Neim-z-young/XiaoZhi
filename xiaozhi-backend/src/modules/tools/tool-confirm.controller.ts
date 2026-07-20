@@ -42,8 +42,13 @@ export class ToolConfirmController {
     // 执行工具
     let result;
     try {
-      const content = await tool.handler(call.arguments);
-      result = { success: true, content };
+      const handlerResult = await tool.handler(call.arguments);
+      // handlerResult 可能已经是 { success, content/error } 格式，或者直接是内容
+      if (typeof handlerResult === 'object' && 'success' in handlerResult) {
+        result = handlerResult;
+      } else {
+        result = { success: true, content: handlerResult };
+      }
     } catch (error: any) {
       result = { success: false, error: error.message };
     }
