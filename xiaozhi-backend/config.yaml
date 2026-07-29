@@ -28,8 +28,9 @@ models:
   
   # 已启用的模型列表
   enabled:
-    - id: gpt-4o-mini
-      name: GPT-4o Mini
+    - id: gpt-4o-mini   # modelId（内部标识）
+      name: GPT-4o Mini    # 显示名称
+      model: gpt-4o-mini    # API 模型名
       provider: openai
       apiKeyEnv: OPENAI_API_KEY  # 环境变量名
       # apiKey: sk-xxx  # 或直接配置 API Key（不推荐）
@@ -38,8 +39,9 @@ models:
       temperature: 0.7
       enabled: true
       
-    - id: gpt-4o
-      name: GPT-4o
+    - id: gpt-4o    # modelId（内部标识）
+      name: GPT-4o    # 显示名称
+      model: gpt-4o    # API 模型名
       provider: openai
       apiKeyEnv: OPENAI_API_KEY
       baseURL: https://api.openai.com/v1
@@ -47,8 +49,9 @@ models:
       temperature: 0.7
       enabled: true
       
-    - id: claude-3-5-sonnet
-      name: Claude 3.5 Sonnet
+    - id: claude-3-5-sonnet   # modelId（内部标识）
+      name: Claude 3.5 Sonnet    # 显示名称
+      model: claude-3-5-sonnet    # API 模型名
       provider: anthropic
       apiKeyEnv: ANTHROPIC_API_KEY
       baseURL: https://api.anthropic.com/v1
@@ -56,8 +59,9 @@ models:
       temperature: 0.7
       enabled: true
         
-    - id: qwen35-35b-a3b-fp8
-      name: Qwen 3.5
+    - id: qwen35-35b-a3b-fp8   # modelId（内部标识）
+      name: Qwen 3.5    # 显示名称
+      model: qwen35-35b-a3b-fp8    # API 模型名
       provider: openai
       apiKeyEnv: QWEN_API_KEY
       apiKey: sk-e5a0263ce05c4e5793fa86f5a522f95e
@@ -65,10 +69,30 @@ models:
       maxTokens: 32768
       temperature: 0.7
       enabled: true
+    
+    - id: deepseek-reasoner   # modelId（内部标识）
+      name: Deepseek-v4-flash  # 显示名称
+      model: deepseek-reasoner    # API 模型名
+      provider: openai
+      apiKeyEnv: QWEN_API_KEY
+      apiKey: sk-054a426dc04d47af87d69d8e1b49575d
+      baseURL: https://eisapi.byd.com/open-api/1.0/llm/v1/deepseek-v4-flash
+      maxTokens: 32768
+      temperature: 0.7
+      enabled: true
 
-vector:
-  dimension: 1536
-  provider: pgvector
+# 向量/Embedding 配置
+# provider: none | api | pgvector
+# - none: 不使用向量，纯关键词搜索，低配置推荐
+# - api: 调用 AI API 生成 embedding，需要配置 embeddingModel
+# - pgvector: 使用 PostgreSQL pgvector 存储和搜索，需要 PostgreSQL + pgvector 扩展
+embedding:
+  provider: none  # 默认不使用向量
+  dimension: 1536  # 向量维度（api 模式时使用）
+  # api 模式配置
+  # model: text-embedding-3-small  # OpenAI embedding 模型
+  # baseURL: https://api.openai.com/v1
+  # apiKeyEnv: OPENAI_API_KEY
 
 # MCP 服务器配置
 mcp:
@@ -80,3 +104,6 @@ mcp:
       command: npx
       args: ["-y", "@modelcontextprotocol/server-filesystem", "D:\\project"]
       enabled: false
+
+# 上线时使用环境变量配置
+ENCRYPTION_KEY: xiaozhi-encryption-key-change-in-production

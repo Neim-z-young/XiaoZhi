@@ -28,6 +28,8 @@ import { Workspace } from './entities/workspace.entity';
 import { KnowledgeBase } from './entities/knowledge-base.entity';
 import { McpServer } from './entities/mcp-server.entity';
 import { Tool } from './entities/tool.entity';
+import { LongTermMemory } from './entities/memory.entity';
+import { Model } from './entities/model.entity';
 
 @Module({
   imports: [
@@ -42,7 +44,7 @@ import { Tool } from './entities/tool.entity';
             type: 'sqljs',
             location: 'xiaozhi',
             autoSave: true,
-            entities: [User, Agent, Plugin, Session, Message, Workspace, KnowledgeBase, McpServer, Tool],
+            entities: [User, Agent, Plugin, Session, Message, Workspace, KnowledgeBase, McpServer, Tool, LongTermMemory, Model],
             synchronize: true,
             logging: false,
           };
@@ -56,7 +58,7 @@ import { Tool } from './entities/tool.entity';
           username: configService.get('database.username'),
           password: configService.get('database.password'),
           database: configService.get('database.database'),
-          entities: [User, Agent, Plugin, Session, Message, Workspace, KnowledgeBase, McpServer, Tool],
+          entities: [User, Agent, Plugin, Session, Message, Workspace, KnowledgeBase, McpServer, Tool, LongTermMemory],
           synchronize: true,
           logging: false,
         };

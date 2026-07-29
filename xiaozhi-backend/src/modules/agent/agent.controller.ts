@@ -14,11 +14,14 @@ export class AgentController {
   @ApiOperation({ summary: 'Agent 流式对话' })
   async streamChat(
     @Query('message') message: string,
-    @Query('model') model: string,
+    @Query('modelId') modelId: string,
     @Query('sessionId') sessionId: string,
+    @Query('userId') userId: string,
+    @Query('agentId') agentId: string,
+    @Query('enableMemory') enableMemory: string = 'true',
     @Res() res: Response,
   ) {
-    this.logger.log(`streamChat called: message="${message}", model="${model}"`);
+    this.logger.log(`streamChat called: message="${message}", modelId="${modelId}", sessionId="${sessionId}", userId="${userId}"`);
     
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -32,8 +35,12 @@ export class AgentController {
 
     try {
       const generator = this.agentExecutor.execute(message, {
-        model: model || 'gpt-4o-mini',
+        modelId: modelId || 'gpt-4o-mini',
         maxIterations: 10,
+        userId,
+        agentId,
+        sessionId,
+        enableMemory: enableMemory !== 'false',
       }, {
         onEvent: sendSSE,
         messages: [],

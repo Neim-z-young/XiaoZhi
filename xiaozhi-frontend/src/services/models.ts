@@ -3,11 +3,14 @@ import api from './api';
 export interface AIModelConfig {
   id: string;
   name: string;
+  model: string;          // API 模型名
   provider: 'openai' | 'anthropic' | 'custom';
+  baseURL?: string;
   maxTokens?: number;
   temperature?: number;
   enabled: boolean;
   hasApiKey?: boolean;
+  isPreset?: boolean;     // 是否为预制模型
 }
 
 export const modelsApi = {

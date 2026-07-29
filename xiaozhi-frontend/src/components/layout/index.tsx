@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
-import { MessageSquare, Bot, Puzzle, Settings, ChevronLeft, ChevronRight, Server, Folder, Wrench } from 'lucide-react';
+import { MessageSquare, Bot, Puzzle, Settings, ChevronLeft, ChevronRight, Server, Folder, Wrench, Cpu } from 'lucide-react';
 
 const navItems = [
   { path: '/chat', icon: MessageSquare, label: '对话' },
@@ -9,6 +9,7 @@ const navItems = [
   { path: '/mcp-servers', icon: Server, label: 'MCP' },
   { path: '/workspaces', icon: Folder, label: '工作区' },
   { path: '/tools', icon: Wrench, label: '工具' },
+  { path: '/models', icon: Cpu, label: '模型' },
   { path: '/settings', icon: Settings, label: '设置' },
 ];
 

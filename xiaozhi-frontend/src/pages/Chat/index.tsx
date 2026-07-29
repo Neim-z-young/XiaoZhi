@@ -24,6 +24,58 @@ interface ThoughtStep {
   content: string;
 }
 
+// 渲染包含思考标签的内容
+function renderThoughtContent(content: string) {
+  if (!content) return null;
+
+  // 如果包含思考标签，分段渲染
+  if (content.includes('<thinking>') || content.includes('<thought>')) {
+    const parts: Array<{ type: 'thinking' | 'content'; text: string }> = [];
+    let remaining = content;
+
+    // 匹配 <thinking>...</thinking> 或 <thought>...</thought>
+    const thinkRegex = /<(?:thinking|thought)>([\s\S]*?)<\/(?:thinking|thought)>/gi;
+    let lastIndex = 0;
+    let match;
+
+    while ((match = thinkRegex.exec(content)) !== null) {
+      // 添加思考标签之前的内容
+      if (match.index > lastIndex) {
+        const beforeText = content.substring(lastIndex, match.index);
+        if (beforeText.trim()) {
+          parts.push({ type: 'content', text: beforeText });
+        }
+      }
+      // 添加思考内容
+      parts.push({ type: 'thinking', text: match[1] });
+      lastIndex = match.index + match[0].length;
+    }
+
+    // 添加剩余内容
+    if (lastIndex < content.length) {
+      const afterText = content.substring(lastIndex);
+      if (afterText.trim()) {
+        parts.push({ type: 'content', text: afterText });
+      }
+    }
+
+    return (
+      <>
+        {parts.map((part, idx) => (
+          part.type === 'thinking' ? (
+            <span key={idx} className="text-amber-400/80 italic">{part.text}</span>
+          ) : (
+            <span key={idx}>{part.text}</span>
+          )
+        ))}
+      </>
+    );
+  }
+
+  // 无标签，直接返回
+  return content;
+}
+
 export function ChatPage() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -156,8 +208,11 @@ export function ChatPage() {
 
     const params = new URLSearchParams({
       message: userMessage,
-      model: selectedModel,
+      modelId: selectedModel,
       sessionId: currentSession?.id || `agent-${Date.now()}`,
+      userId: 'default-user', // TODO: 后续从登录态获取
+      agentId: 'default-agent',
+      enableMemory: 'true',
     });
 
     const eventSource = new EventSource(
@@ -468,7 +523,12 @@ export function ChatPage() {
         {(messages || []).map((msg) => {
           // 根据消息内容判断类型
           const isEmpty = !msg.content || msg.content.trim() === '';
-          const isWarning = isEmpty || msg.content.includes('抱歉') || msg.content.includes('警告') || msg.content.includes('错误');
+          // 警告消息：检查是否真的是错误/警告提示（而非礼貌性回复）
+          const isWarning = isEmpty || 
+            msg.content.includes('没有获取到有效的内容') ||
+            msg.content.includes('发生错误') ||
+            (msg.content.startsWith('错误') && msg.content.length < 50) ||
+            (msg.content.startsWith('警告') && msg.content.length < 50);
           const isSystem = msg.role === 'system';
           // 空内容显示为警告提示
           const displayContent = isEmpty ? '抱歉，我没有获取到有效的内容。请稍后重试，或者尝试更具体地描述您的需求。' : msg.content;
@@ -530,7 +590,7 @@ export function ChatPage() {
                               </span>
                             </div>
                             <pre className="text-xs text-textSecondary whitespace-pre-wrap font-mono leading-relaxed bg-surface-light rounded-lg p-2">
-                              {typeof step.content === 'string' ? step.content : JSON.stringify(step.content)}
+                              {renderThoughtContent(typeof step.content === 'string' ? step.content : JSON.stringify(step.content))}
                             </pre>
                           </div>
                         ))}
@@ -650,7 +710,7 @@ export function ChatPage() {
                 {streamingContent && !isThinkingComplete && (
                   <div className="mt-2">
                     <pre className="text-xs text-textSecondary whitespace-pre-wrap font-mono leading-relaxed">
-                      {typeof streamingContent === 'string' ? streamingContent : JSON.stringify(streamingContent)}
+                      {renderThoughtContent(typeof streamingContent === 'string' ? streamingContent : JSON.stringify(streamingContent))}
                       <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-1"></span>
                     </pre>
                   </div>

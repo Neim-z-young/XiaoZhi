@@ -1,10 +1,11 @@
 export interface AIModelConfig {
-  id: string;
-  name: string;
+  id: string;           // 唯一标识符
+  name: string;         // 显示名称（前端展示）
+  model: string;        // API 模型名（实际传给 API）
   provider: 'openai' | 'anthropic' | 'custom' | 'vllm';
   apiKey?: string;
   apiKeyEnv?: string;
-  baseURL: string;
+  baseURL?: string;
   maxTokens?: number;
   temperature?: number;
   enabled: boolean;

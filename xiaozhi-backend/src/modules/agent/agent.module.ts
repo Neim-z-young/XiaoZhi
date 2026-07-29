@@ -5,9 +5,11 @@ import { ToolsModule } from '../tools/tools.module';
 import { AIModule } from '../ai/ai.module';
 import { McpModule } from '../mcp/mcp.module';
 import { WorkspaceModule } from '../workspace/workspace.module';
+import { MemoryModule } from '../memory/memory.module';
+import { ConfigModule } from '../../config/config.module';
 
 @Module({
-  imports: [ToolsModule, AIModule, McpModule, WorkspaceModule],
+  imports: [ConfigModule, ToolsModule, AIModule, McpModule, WorkspaceModule, MemoryModule],
   controllers: [AgentController],
   providers: [AgentExecutor],
   exports: [AgentExecutor],

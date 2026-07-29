@@ -7,6 +7,8 @@ import { ToolConfigService } from '../tools/tool-config.service';
 import { AIGatewayService } from '../ai/ai-gateway.service';
 import { McpServerService } from '../mcp/mcp-server.service';
 import { WorkspaceService } from '../workspace/workspace.service';
+import { MemoryService } from '../memory/memory.service';
+import { ModelConfigService } from '../../config/model-config.service';
 
 export interface ThoughtStep {
   id: string;
@@ -20,9 +22,13 @@ export interface ThoughtStep {
 }
 
 export interface AgentConfig {
-  model: string;
+  modelId: string;  // 配置中的模型 ID（用于查找配置）
   maxIterations?: number;
   systemPrompt?: string;
+  userId?: string;
+  agentId?: string;
+  sessionId?: string;
+  enableMemory?: boolean;
 }
 
 export interface AgentStreamEvent {
@@ -63,6 +69,7 @@ function buildSystemPrompt(
   mcpTools: Array<{ name: string; description: string; inputSchema: any; serverId: string }>,
   directories: Array<{ path: string; type: string; label: string }> = [],
   enabledBuiltinTools: string[] = [],
+  memoryContext?: string,
 ): string {
   let prompt = SYSTEM_PROMPT_BASE;
 
@@ -107,6 +114,11 @@ function buildSystemPrompt(
     prompt += '\n\n注意：MCP 工具可以直接调用，参数格式与内置工具相同。';
   }
 
+  // 添加记忆上下文
+  if (memoryContext) {
+    prompt += '\n\n用户历史记忆：\n' + memoryContext;
+  }
+
   return prompt;
 }
 
@@ -123,6 +135,8 @@ export class AgentExecutor implements OnModuleInit {
     private readonly toolConfigService: ToolConfigService,
     @Inject(forwardRef(() => ToolService))
     private readonly toolService: ToolService,
+    private readonly memoryService: MemoryService,
+    private readonly modelConfigService: ModelConfigService,
   ) {}
 
   async onModuleInit() {
@@ -182,6 +196,10 @@ export class AgentExecutor implements OnModuleInit {
     },
   ): AsyncGenerator<AgentStreamEvent> {
     const maxIterations = config.maxIterations || 10;
+    const enableMemory = config.enableMemory !== false; // 默认启用记忆
+    const userId = config.userId || 'default-user';
+    const agentId = config.agentId || 'default-agent';
+    const sessionId = config.sessionId;
 
     // 刷新 MCP 工具，确保获取最新的启用状态
     await this.refreshMcpTools();
@@ -193,13 +211,53 @@ export class AgentExecutor implements OnModuleInit {
     // 刷新工作区目录，确保工具可以访问最新的工作区
     const directories = await this.refreshWorkspaceRoots();
 
+    // 加载短时记忆（会话历史）
+    let shortTermMessages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [];
+    if (enableMemory && sessionId) {
+      try {
+        const shortTermMemories = await this.memoryService.readShortTerm(sessionId, 20);
+        this.logger.log(`Found ${shortTermMemories.length} short-term memories for session=${sessionId}`);
+        shortTermMessages = shortTermMemories.map(m => ({
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+        }));
+      } catch (error: any) {
+        this.logger.warn(`Failed to load short-term memories: ${error.message}`);
+      }
+    }
+
+    // 加载长时记忆上下文
+    let memoryContext: string | undefined;
+    this.logger.log(`Loading long-term memories: enableMemory=${enableMemory}, userId=${userId}, agentId=${agentId}`);
+    if (enableMemory && userId && agentId) {
+      try {
+        const memories = await this.memoryService.getLongTermMemories(userId, agentId, 10);
+        this.logger.log(`Found ${memories.length} long-term memories in database`);
+        if (memories.length > 0) {
+          memoryContext = memories
+            .map((m, idx) => `[${idx + 1}] ${m.content}`)
+            .join('\n');
+          this.logger.log(`Memory context prepared, first 200 chars: ${memoryContext.substring(0, 200)}`);
+        }
+      } catch (error: any) {
+        this.logger.warn(`Failed to load long-term memories: ${error.message}`);
+      }
+    } else {
+      this.logger.log(`Skipping long-term memory load: enableMemory=${enableMemory}, userId=${userId}, agentId=${agentId}`);
+    }
+
     let messages = [
-      { role: 'system' as const, content: buildSystemPrompt(this.mcpTools, directories, enabledBuiltinTools) },
+      { role: 'system' as const, content: buildSystemPrompt(this.mcpTools, directories, enabledBuiltinTools, memoryContext) },
+      ...shortTermMessages,  // 添加会话历史
       ...context.messages,
       { role: 'user' as const, content: userMessage },
     ];
 
-    this.logger.log(`AgentExecutor started with model: ${config.model}`);
+    // 获取模型的 API 名称
+    const modelConfig = this.modelConfigService.getModel(config.modelId);
+    const apiModelName = modelConfig?.model || config.modelId;
+    
+    this.logger.log(`AgentExecutor started with modelId: ${config.modelId}, apiModel: ${apiModelName}, memory: ${enableMemory}`);
     this.logger.log(`MCP tools available: ${this.mcpTools.map(t => t.name).join(', ')}`);
 
     for (let i = 0; i < maxIterations; i++) {
@@ -211,38 +269,55 @@ export class AgentExecutor implements OnModuleInit {
       let chunkCount = 0;
       let streamEnded = false;
 
-      // 设置 60 秒超时
+      // 设置超时（深度思考模型如 deepseek-reasoner 可能需要更长时间）
+      const timeoutMs = 180000; // 3 分钟
+      let timeoutHandle: NodeJS.Timeout | undefined;
+      
       const timeoutPromise = new Promise<'timeout'>((resolve) => {
-        setTimeout(() => resolve('timeout'), 60000);
+        timeoutHandle = setTimeout(() => {
+          this.logger.warn(`Iteration ${i + 1}: AI stream timeout after ${timeoutMs / 1000}s`);
+          resolve('timeout');
+        }, timeoutMs);
       });
 
       const streamPromise = (async () => {
-        for await (const chunk of this.aiGateway.stream({
-          model: config.model,
-          messages: messages.map(m => ({
-            role: m.role as 'user' | 'assistant' | 'system',
-            content: m.content,
-          })),
-          temperature: 0.7,
-        })) {
-          chunkCount++;
-          thought += chunk.content;
-          // 只发送新增的部分
-          if (thought.length > lastSentLength) {
-            const newContent = thought.substring(lastSentLength);
-            context.onEvent({ type: 'thought', content: newContent });
-            lastSentLength = thought.length;
+        try {
+          for await (const chunk of this.aiGateway.stream({
+            model: apiModelName,
+            messages: messages.map(m => ({
+              role: m.role as 'user' | 'assistant' | 'system',
+              content: m.content,
+            })),
+            temperature: 0.7,
+          })) {
+            chunkCount++;
+            thought += chunk.content;
+            // 只发送新增的部分（保留完整内容，包括思考标签）
+            if (thought.length > lastSentLength) {
+              const newContent = thought.substring(lastSentLength);
+              if (newContent) {
+                this.logger.log(`Sending thought event, length=${newContent.length}, content="${newContent.substring(0, 100)}..."`);
+                context.onEvent({ type: 'thought', content: newContent });
+              }
+              lastSentLength = thought.length;
+            }
           }
+        } catch (error: any) {
+          this.logger.error(`Stream error: ${error.message}`);
         }
         streamEnded = true;
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+        }
       })();
 
       // 等待流完成或超时
       await Promise.race([streamPromise, timeoutPromise]);
-
-      // 如果超时但流还没结束，发出警告
+      
+      // 如果超时但流还没结束，继续等待流完成（不中断）
       if (!streamEnded) {
-        this.logger.warn(`Iteration ${i + 1}: AI stream timeout after 60s`);
+        this.logger.log(`Iteration ${i + 1}: Waiting for stream to finish...`);
+        await streamPromise;
       }
       
       this.logger.log(`Iteration ${i + 1}: Received ${chunkCount} chunks, total length: ${thought.length}`);
@@ -271,6 +346,17 @@ export class AgentExecutor implements OnModuleInit {
           finalContent = JSON.stringify(finalContent);
         }
         
+        // 保存对话到短时记忆
+        if (enableMemory && sessionId && typeof finalContent === 'string' && finalContent.length > 0) {
+          try {
+            await this.memoryService.writeShortTerm(sessionId, userMessage, 'user');
+            await this.memoryService.writeShortTerm(sessionId, finalContent, 'assistant');
+            this.logger.log(`Saved conversation to short-term memory: session=${sessionId}`);
+          } catch (error: any) {
+            this.logger.warn(`Failed to save to short-term memory: ${error.message}`);
+          }
+        }
+
         const doneEvent = { type: 'done' as const, content: finalContent };
         context.onEvent(doneEvent);
         yield doneEvent;
@@ -397,6 +483,25 @@ export class AgentExecutor implements OnModuleInit {
     context.onEvent(doneEvent);
     yield doneEvent;
 
+    // 保存对话到长时记忆（仅当有实际对话内容时）
+    if (enableMemory && userId && agentId && sessionId && userMessage.trim()) {
+      try {
+        // 将用户消息和回复拼接为记忆内容
+        const memoryContent = `用户: ${userMessage}\n助手: ${finalContent}`;
+        await this.memoryService.writeLongTerm(
+          userId,
+          agentId,
+          memoryContent,
+          sessionId,
+          'conversation',
+          { source: 'agent_executor' }
+        );
+        this.logger.log(`Memory saved for user=${userId}, agent=${agentId}, session=${sessionId}`);
+      } catch (error: any) {
+        this.logger.warn(`Failed to save memory: ${error.message}`);
+      }
+    }
+
     this.logger.log('AgentExecutor finished');
   }
 
@@ -424,14 +529,39 @@ export class AgentExecutor implements OnModuleInit {
   }
 
   private extractReply(thought: string): string | null {
+    // 深度思考模型可能分阶段输出：
+    // 1. 思考过程（可能包含 <thinking> 等标记）
+    // 2. 最终回复（[REPLY] 或 [ACTION]）
+    
+    // 首先检查是否有 [ACTION] 标记 - 如果有，说明需要调用工具，不提取回复
+    if (thought.includes('[ACTION]')) {
+      return null;
+    }
+    
+    // 检查是否有 [REPLY] 标记 - 只取最后一个 [REPLY] 后的内容
     const replyMatch = thought.match(/\[REPLY\][\s\S]*$/);
     if (replyMatch) {
       return replyMatch[0].replace(/^\[REPLY\]/, '').trim();
     }
-    // 如果没有 [REPLY] 标记，检查是否也没有 [ACTION]，如果有就是纯回复
-    if (!thought.includes('[ACTION]')) {
+    
+    // 如果没有标记，检查是否完全没有 [ACTION] - 可能是纯回复（直接输出，不走工具）
+    if (!thought.includes('[ACTION]') && !thought.includes('[REPLY]')) {
+      // 对于深度思考模型，可能输出格式是：
+      // <thinking>思考内容...</thinking>
+      // 最终回复内容
+      // 需要提取最后非思考部分的内容
+      const thinkingEndMatch = thought.match(/<\/thinking>[\s\S]*$/i);
+      if (thinkingEndMatch) {
+        const afterThinking = thinkingEndMatch[0].replace(/<\/thinking>/i, '').trim();
+        if (afterThinking) {
+          return afterThinking;
+        }
+      }
+      
+      // 否则返回全部内容（作为纯回复）
       return thought.trim();
     }
+
     return null;
   }
 }

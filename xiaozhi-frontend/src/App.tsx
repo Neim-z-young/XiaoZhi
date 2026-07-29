@@ -8,6 +8,7 @@ import { LoginPage } from './pages/Login';
 import { McpServersPage } from './pages/McpServers';
 import { WorkspacesPage } from './pages/Workspaces';
 import { ToolsPage } from './pages/Tools';
+import { ModelsPage } from './pages/Models';
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
         <Route path="mcp-servers" element={<McpServersPage />} />
         <Route path="workspaces" element={<WorkspacesPage />} />
         <Route path="tools" element={<ToolsPage />} />
+        <Route path="models" element={<ModelsPage />} />
       </Route>
     </Routes>
   );
