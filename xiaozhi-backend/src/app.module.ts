@@ -10,7 +10,7 @@ import { KnowledgeModule } from './modules/knowledge/knowledge.module';
 import { MemoryModule } from './modules/memory/memory.module';
 import { SystemModule } from './modules/system/system.module';
 import { AuthModule } from './modules/auth/auth.module';
-import { WorkspacesModule } from './modules/workspaces/workspaces.module';
+import { WorkspaceModule } from './modules/workspace/workspace.module';
 import { AIModule } from './modules/ai/ai.module';
 import { ModelsModule } from './modules/models/models.module';
 import { McpModule } from './modules/mcp/mcp.module';
@@ -27,6 +27,7 @@ import { Message } from './entities/message.entity';
 import { Workspace } from './entities/workspace.entity';
 import { KnowledgeBase } from './entities/knowledge-base.entity';
 import { McpServer } from './entities/mcp-server.entity';
+import { Tool } from './entities/tool.entity';
 
 @Module({
   imports: [
@@ -41,7 +42,7 @@ import { McpServer } from './entities/mcp-server.entity';
             type: 'sqljs',
             location: 'xiaozhi',
             autoSave: true,
-            entities: [User, Agent, Plugin, Session, Message, Workspace, KnowledgeBase, McpServer],
+            entities: [User, Agent, Plugin, Session, Message, Workspace, KnowledgeBase, McpServer, Tool],
             synchronize: true,
             logging: false,
           };
@@ -55,7 +56,7 @@ import { McpServer } from './entities/mcp-server.entity';
           username: configService.get('database.username'),
           password: configService.get('database.password'),
           database: configService.get('database.database'),
-          entities: [User, Agent, Plugin, Session, Message, Workspace, KnowledgeBase, McpServer],
+          entities: [User, Agent, Plugin, Session, Message, Workspace, KnowledgeBase, McpServer, Tool],
           synchronize: true,
           logging: false,
         };
@@ -70,7 +71,7 @@ import { McpServer } from './entities/mcp-server.entity';
     KnowledgeModule,
     MemoryModule,
     SystemModule,
-    WorkspacesModule,
+    WorkspaceModule,
     AIModule,
     ModelsModule,
     McpModule,

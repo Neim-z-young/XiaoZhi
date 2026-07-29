@@ -1,23 +1,25 @@
 import api from './api';
 
-export interface ToolCall {
+export interface Tool {
   id: string;
-  toolName: string;
-  arguments: Record<string, any>;
+  name: string;
+  description: string;
+  enabled: boolean;
   level: number;
-  timestamp: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export const toolsApi = {
-  getPendingConfirmations: () =>
-    api.get<ToolCall[]>('/tools/pending'),
+  list: () =>
+    api.get<{ list: Tool[]; total: number }>('/tools'),
 
-  getPendingConfirmation: (id: string) =>
-    api.get<ToolCall>(`/tools/pending/${id}`),
+  enable: (id: string) =>
+    api.post(`/tools/${id}/enable`),
 
-  approve: (id: string) =>
-    api.post(`/tools/approve/${id}`),
+  disable: (id: string) =>
+    api.post(`/tools/${id}/disable`),
 
-  reject: (id: string) =>
-    api.post(`/tools/reject/${id}`),
+  init: () =>
+    api.post('/tools/init'),
 };

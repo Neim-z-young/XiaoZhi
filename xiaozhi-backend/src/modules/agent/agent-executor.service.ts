@@ -1,9 +1,12 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Inject, forwardRef } from '@nestjs/common';
 import * as os from 'os';
 import * as path from 'path';
 import { ToolRegistry, ToolLevel } from '../tools/tool-registry.service';
+import { ToolService } from '../tools/tool.service';
+import { ToolConfigService } from '../tools/tool-config.service';
 import { AIGatewayService } from '../ai/ai-gateway.service';
 import { McpServerService } from '../mcp/mcp-server.service';
+import { WorkspaceService } from '../workspace/workspace.service';
 
 export interface ThoughtStep {
   id: string;
@@ -33,22 +36,11 @@ export interface AgentStreamEvent {
 
 const SYSTEM_PROMPT_BASE = `你是一个智能助手，可以调用工具来完成任务。
 
-内置工具：
-1. file_read(path): 读取文件，需要提供完整文件路径
-2. directory_list(path): 列出目录内容
-3. file_search(path, pattern): 搜索文件，path是目录，pattern是文件名模式（如*.ts）
-4. file_write(path, content): 写入文件
-5. command_execute(command): 执行命令（Windows系统注意使用PowerShell命令）
-
 重要规则：
 - 所有工具参数必须使用绝对路径，禁止使用相对路径（如 "."、".."）
-- 沙箱工作目录: ${path.join(os.homedir(), '.xiaozhi', 'sandbox')}
-- 允许访问的根目录: D:\\project\\XiaoZhi 和沙箱目录
-- file_search 需要提供 path 参数（要搜索的目录）和 pattern 参数
-- 执行命令失败后，你应该检查错误原因并尝试正确的命令
 - 你会收到工具执行结果，格式为：[OBSERVATION] 结果内容
-- 如果工具返回"路径不在允许范围内"，必须使用沙箱目录的绝对路径重试
-- 沙箱目录下的文件可以直接访问，其他路径需要确认
+- 如果工具返回"路径不在允许范围内"，必须使用沙箱目录或工作区的绝对路径重试
+- 执行命令失败后，你应该检查错误原因并尝试正确的命令
 
 响应格式：
 如果需要调用工具，回复格式为（必须严格按此格式）：
@@ -57,21 +49,64 @@ const SYSTEM_PROMPT_BASE = `你是一个智能助手，可以调用工具来完�
 如果直接回复，格式为：
 [REPLY] 你的回复内容`;
 
-// 动态生成包含 MCP 工具的 system prompt
-function buildSystemPrompt(mcpTools: Array<{ name: string; description: string; inputSchema: any; serverId: string }>): string {
+// 内置工具定义
+const BUILTIN_TOOLS: Record<string, { description: string }> = {
+  'file_read': { description: '读取文件，需要提供完整文件路径' },
+  'directory_list': { description: '列出目录内容' },
+  'file_search': { description: '搜索文件，path是目录，pattern是文件名模式（如*.ts）' },
+  'file_write': { description: '写入文件' },
+  'command_execute': { description: '执行命令（Windows系统注意使用PowerShell命令）' },
+};
+
+// 动态生成包含 MCP 工具和工作区信息的 system prompt
+function buildSystemPrompt(
+  mcpTools: Array<{ name: string; description: string; inputSchema: any; serverId: string }>,
+  directories: Array<{ path: string; type: string; label: string }> = [],
+  enabledBuiltinTools: string[] = [],
+): string {
   let prompt = SYSTEM_PROMPT_BASE;
-  
+
+  // 添加已启用的内置工具
+  if (enabledBuiltinTools.length > 0) {
+    prompt += '\n\n内置工具：';
+    enabledBuiltinTools.forEach((toolName, index) => {
+      const tool = BUILTIN_TOOLS[toolName];
+      if (tool) {
+        prompt += `\n${index + 1}. ${toolName}(path): ${tool.description}`;
+      }
+    });
+  }
+
+  // 添加允许的目录信息
+  if (directories.length > 0) {
+    const workspaceDirs = directories.filter(d => d.type === 'workspace');
+    const sandboxDirs = directories.filter(d => d.type === 'sandbox');
+    const mcpDirs = directories.filter(d => d.type === 'mcp');
+
+    prompt += '\n\n允许访问的目录：';
+    if (sandboxDirs.length > 0) {
+      prompt += `\n- 沙箱目录: ${sandboxDirs.map(d => d.path).join(', ')}`;
+    }
+    if (workspaceDirs.length > 0) {
+      prompt += `\n- 工作区: ${workspaceDirs.map(d => `${d.label}(${d.path})`).join(', ')}`;
+    }
+    if (mcpDirs.length > 0) {
+      prompt += `\n- MCP 目录: ${mcpDirs.map(d => `${d.label}(${d.path})`).join(', ')}`;
+    }
+  }
+
+  // 添加 MCP 工具
   if (mcpTools.length > 0) {
-    prompt += `\n\nMCP 服务器工具（来自外部 MCP 服务器）：\n`;
+    prompt += '\n\nMCP 服务器工具（来自外部 MCP 服务器）：';
     for (const tool of mcpTools) {
-      const params = tool.inputSchema?.properties 
+      const params = tool.inputSchema?.properties
         ? Object.keys(tool.inputSchema.properties).map(k => `${k}`).join(', ')
         : '（无参数）';
-      prompt += `- ${tool.name}(${params}): ${tool.description || 'MCP 工具'}\n`;
+      prompt += `\n- ${tool.name}(${params}): ${tool.description || 'MCP 工具'}`;
     }
-    prompt += `\n注意：MCP 工具可以直接调用，参数格式与内置工具相同。`;
+    prompt += '\n\n注意：MCP 工具可以直接调用，参数格式与内置工具相同。';
   }
-  
+
   return prompt;
 }
 
@@ -84,11 +119,16 @@ export class AgentExecutor implements OnModuleInit {
     private readonly toolRegistry: ToolRegistry,
     private readonly aiGateway: AIGatewayService,
     private readonly mcpServerService: McpServerService,
+    private readonly workspaceService: WorkspaceService,
+    private readonly toolConfigService: ToolConfigService,
+    @Inject(forwardRef(() => ToolService))
+    private readonly toolService: ToolService,
   ) {}
 
   async onModuleInit() {
-    // 初始化 MCP 工具
+    // 初始化 MCP 工具和内置工具配置
     await this.refreshMcpTools();
+    await this.toolConfigService.initBuiltinTools();
   }
 
   // 刷新 MCP 工具（每次执行前调用，确保获取最新状态）
@@ -104,9 +144,12 @@ export class AgentExecutor implements OnModuleInit {
           inputSchema: tool.inputSchema || { type: 'object', properties: {}, required: [] },
           serverId: tool.serverId,
         });
-        this.logger.log(`Loaded MCP tool from enabled server: ${tool.name} (${tool.serverName})`);
       }
       this.logger.log(`Total MCP tools loaded from enabled servers: ${this.mcpTools.length}`);
+
+      // 更新 MCP 服务器的目录
+      const mcpDirs = await this.mcpServerService.getEnabledServerDirectories();
+      this.toolService.updateMcpDirectories(mcpDirs);
     } catch (error: any) {
       this.logger.warn(`Failed to load MCP tools: ${error.message}`);
     }
@@ -115,6 +158,19 @@ export class AgentExecutor implements OnModuleInit {
   private async loadMcpTools() {
     // 为了向后兼容，调用 refreshMcpTools
     await this.refreshMcpTools();
+  }
+
+  // 刷新工作区目录并返回所有目录信息
+  private async refreshWorkspaceRoots(): Promise<Array<{ path: string; type: string; label: string }>> {
+    try {
+      const workspaces = await this.workspaceService.findEnabled();
+      this.toolService.updateWorkspaceRoots(workspaces);
+      this.logger.log(`Workspace roots refreshed: ${workspaces.length} enabled`);
+      return this.toolService.getAllDirectories();
+    } catch (error: any) {
+      this.logger.warn(`Failed to refresh workspace roots: ${error.message}`);
+      return this.toolService.getAllDirectories();
+    }
   }
 
   async *execute(
@@ -130,8 +186,15 @@ export class AgentExecutor implements OnModuleInit {
     // 刷新 MCP 工具，确保获取最新的启用状态
     await this.refreshMcpTools();
 
+    // 刷新工具配置，确保获取最新的启用/禁用状态
+    await this.toolConfigService.refreshEnabledTools();
+    const enabledBuiltinTools = await this.toolConfigService.getEnabledToolNames();
+
+    // 刷新工作区目录，确保工具可以访问最新的工作区
+    const directories = await this.refreshWorkspaceRoots();
+
     let messages = [
-      { role: 'system' as const, content: buildSystemPrompt(this.mcpTools) },
+      { role: 'system' as const, content: buildSystemPrompt(this.mcpTools, directories, enabledBuiltinTools) },
       ...context.messages,
       { role: 'user' as const, content: userMessage },
     ];
@@ -142,27 +205,44 @@ export class AgentExecutor implements OnModuleInit {
     for (let i = 0; i < maxIterations; i++) {
       this.logger.log(`Iteration ${i + 1}: Starting think()`);
 
-      // 使用流式思考
+      // 使用流式思考，带超时控制
       let thought = '';
       let lastSentLength = 0;
       let chunkCount = 0;
+      let streamEnded = false;
 
-      for await (const chunk of this.aiGateway.stream({
-        model: config.model,
-        messages: messages.map(m => ({
-          role: m.role as 'user' | 'assistant' | 'system',
-          content: m.content,
-        })),
-        temperature: 0.7,
-      })) {
-        chunkCount++;
-        thought += chunk.content;
-        // 只发送新增的部分
-        if (thought.length > lastSentLength) {
-          const newContent = thought.substring(lastSentLength);
-          context.onEvent({ type: 'thought', content: newContent });
-          lastSentLength = thought.length;
+      // 设置 60 秒超时
+      const timeoutPromise = new Promise<'timeout'>((resolve) => {
+        setTimeout(() => resolve('timeout'), 60000);
+      });
+
+      const streamPromise = (async () => {
+        for await (const chunk of this.aiGateway.stream({
+          model: config.model,
+          messages: messages.map(m => ({
+            role: m.role as 'user' | 'assistant' | 'system',
+            content: m.content,
+          })),
+          temperature: 0.7,
+        })) {
+          chunkCount++;
+          thought += chunk.content;
+          // 只发送新增的部分
+          if (thought.length > lastSentLength) {
+            const newContent = thought.substring(lastSentLength);
+            context.onEvent({ type: 'thought', content: newContent });
+            lastSentLength = thought.length;
+          }
         }
+        streamEnded = true;
+      })();
+
+      // 等待流完成或超时
+      await Promise.race([streamPromise, timeoutPromise]);
+
+      // 如果超时但流还没结束，发出警告
+      if (!streamEnded) {
+        this.logger.warn(`Iteration ${i + 1}: AI stream timeout after 60s`);
       }
       
       this.logger.log(`Iteration ${i + 1}: Received ${chunkCount} chunks, total length: ${thought.length}`);
@@ -256,6 +336,19 @@ export class AgentExecutor implements OnModuleInit {
         messages.push({ role: 'assistant', content: thought });
         messages.push({ role: 'user', content: `[OBSERVATION] ${obsContent}` });
       } else {
+        // 检查工具是否启用
+        if (!this.toolConfigService.isToolEnabled(action.name)) {
+          const disabledEvent = {
+            type: 'observation' as const,
+            content: `工具 "${action.name}" 已禁用，无法执行`,
+          };
+          context.onEvent(disabledEvent);
+          yield disabledEvent;
+          messages.push({ role: 'assistant', content: thought });
+          messages.push({ role: 'user', content: `[OBSERVATION] ${disabledEvent.content}` });
+          continue;
+        }
+
         const result = await this.toolRegistry.execute(action.name, action.args);
 
         // 构建执行详情信息

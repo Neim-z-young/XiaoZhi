@@ -1,11 +1,15 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { ToolRegistry } from './tool-registry.service';
 import { ToolService } from './tool.service';
-import { ToolConfirmController } from './tool-confirm.controller';
+import { ToolConfigService } from './tool-config.service';
+import { ToolController } from './tool.controller';
+import { Tool } from '../../entities/tool.entity';
 
 @Module({
-  controllers: [ToolConfirmController],
-  providers: [ToolRegistry, ToolService],
-  exports: [ToolRegistry, ToolService],
+  imports: [TypeOrmModule.forFeature([Tool])],
+  controllers: [ToolController],
+  providers: [ToolRegistry, ToolService, ToolConfigService],
+  exports: [ToolRegistry, ToolService, ToolConfigService],
 })
 export class ToolsModule {}

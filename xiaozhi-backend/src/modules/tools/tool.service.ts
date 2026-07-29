@@ -9,37 +9,156 @@ import { ToolRegistry, ToolLevel, ToolDefinition } from './tool-registry.service
 
 const execAsync = promisify(exec);
 
+// 检测文件编码
+async function detectAndReadFile(filePath: string): Promise<{ content: string; encoding: string }> {
+  // 先尝试用 UTF-8 读取
+  try {
+    const content = await fsPromises.readFile(filePath, 'utf-8');
+    // 检查是否有乱码特征（替换字符）
+    const hasReplacements = content.includes('\ufffd');
+    if (!hasReplacements) {
+      return { content, encoding: 'utf-8' };
+    }
+  } catch {
+    // 继续尝试其他编码
+  }
+
+  // 尝试 GBK（Windows 中文环境常用）
+  try {
+    const buffer = await fsPromises.readFile(filePath);
+    // 使用 PowerShell 转换为 UTF-8
+    const { stdout } = await execAsync(
+      `powershell -Command "[System.IO.File]::ReadAllText('${filePath.replace(/\\/g, '\\\\')}', [System.Text.Encoding]::Default)"`,
+      { encoding: 'utf-8' }
+    );
+    if (stdout) {
+      return { content: stdout, encoding: 'gbk' };
+    }
+  } catch {
+    // 继续
+  }
+
+  // 最后尝试 binary 并尝试解码
+  try {
+    const buffer = await fsPromises.readFile(filePath);
+    // 尝试 UTF-8 解码
+    const content = buffer.toString('utf-8');
+    return { content, encoding: 'utf-8 (binary)' };
+  } catch {
+    return { content: '[无法读取文件内容]', encoding: 'unknown' };
+  }
+}
+
+// 目录类型枚举
+export enum DirectoryType {
+  SANDBOX = 'sandbox',       // 沙箱目录 ~/.xiaozhi/sandbox
+  WORKSPACE = 'workspace',    // 用户工作区
+  MCP = 'mcp',              // MCP 服务器配置的目录
+  DENIED = 'denied',         // 拒绝访问
+}
+
+// 目录根配置
+interface DirectoryRoot {
+  path: string;
+  type: DirectoryType;
+  label: string;
+}
+
 @Injectable()
 export class ToolService {
   private readonly logger = new Logger(ToolService.name);
 
-  // 沙箱根目录
-  private readonly SANDBOX_ROOTS = [
-    path.join(os.homedir(), '.xiaozhi', 'sandbox'),
-    'D:\\project\\XiaoZhi',
-    process.cwd(),
+  // 动态工作区目录
+  private workspaceRoots: DirectoryRoot[] = [];
+
+  // MCP 服务器配置的目录
+  private mcpDirectories: DirectoryRoot[] = [];
+
+  // 静态目录根配置
+  private readonly staticDirectories: DirectoryRoot[] = [
+    { path: path.join(os.homedir(), '.xiaozhi', 'sandbox'), type: DirectoryType.SANDBOX, label: '沙箱目录' },
   ];
 
   constructor(private readonly toolRegistry: ToolRegistry) {
     this.registerBuiltInTools();
   }
 
-  // 验证路径是否在沙箱允许范围内
-  private validateSandboxPath(targetPath: string): { valid: boolean; error?: string } {
+  // 更新允许的工作区目录
+  updateWorkspaceRoots(workspaces: Array<{ id?: string; name?: string; path: string; enabled: boolean }>): void {
+    this.workspaceRoots = workspaces
+      .filter(w => w.enabled)
+      .map(w => ({
+        path: path.normalize(w.path),
+        type: DirectoryType.WORKSPACE,
+        label: w.name || '工作区',
+      }));
+    this.logger.log(`Workspace roots updated: ${this.workspaceRoots.map(r => `${r.label}(${r.path})`).join(', ') || 'none'}`);
+  }
+
+  // 获取所有目录根
+  getAllDirectories(): DirectoryRoot[] {
+    return [...this.staticDirectories, ...this.workspaceRoots, ...this.mcpDirectories];
+  }
+
+  // 递归搜索文件
+  private async searchFiles(dirPath: string, pattern: string): Promise<string> {
+    const results: string[] = [];
+
+    async function search(currentPath: string) {
+      try {
+        const entries = await fsPromises.readdir(currentPath, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(currentPath, entry.name);
+          if (entry.name.includes(pattern)) {
+            const mode = entry.isDirectory() ? 'd-----' : '-a----';
+            results.push(`${fullPath}\t${mode}`);
+          }
+          if (entry.isDirectory()) {
+            await search(fullPath);
+          }
+        }
+      } catch {
+        // 忽略无法访问的目录
+      }
+    }
+
+    await search(dirPath);
+    if (results.length === 0) {
+      return `No files matching "${pattern}" found in ${dirPath}`;
+    }
+    return `FullName\tMode\n${results.join('\n')}`;
+  }
+
+  // 更新 MCP 服务器配置的目录
+  updateMcpDirectories(directories: Array<{ path: string; serverName?: string }>): void {
+    this.mcpDirectories = directories.map(d => ({
+      path: path.normalize(d.path),
+      type: DirectoryType.MCP,
+      label: d.serverName || 'MCP 目录',
+    }));
+    this.logger.log(`MCP directories updated: ${this.mcpDirectories.map(r => `${r.label}(${r.path})`).join(', ') || 'none'}`);
+  }
+
+  // 验证路径是否在允许范围内，返回目录类型
+  validatePath(targetPath: string): { valid: boolean; type: DirectoryType; error?: string } {
     const normalizedPath = path.normalize(targetPath);
 
-    // 检查是否在允许的根目录下
-    for (const root of this.SANDBOX_ROOTS) {
-      const normalizedRoot = path.normalize(root);
+    // 获取所有允许的目录
+    const allDirectories = this.getAllDirectories();
+
+    // 检查是否在允许的目录下
+    for (const dir of allDirectories) {
+      const normalizedRoot = path.normalize(dir.path);
       if (normalizedPath.startsWith(normalizedRoot) ||
           normalizedPath.replace(/\\/g, '/').startsWith(normalizedRoot.replace(/\\/g, '/'))) {
-        return { valid: true };
+        return { valid: true, type: dir.type };
       }
     }
 
     return {
       valid: false,
-      error: `路径不在允许范围内: ${targetPath}。请使用 ~/.xiaozhi/sandbox 目录下的文件。`,
+      type: DirectoryType.DENIED,
+      error: `路径不在允许范围内: ${targetPath}`,
     };
   }
 
@@ -58,15 +177,17 @@ export class ToolService {
       level: ToolLevel.L1_SAFE,
       requiresConfirm: true,
       handler: async ({ path: filePath }: { path: string }) => {
-        const validation = this.validateSandboxPath(filePath);
+        const validation = this.validatePath(filePath);
         if (!validation.valid) {
           return { success: false, error: validation.error };
         }
-        
-        // 优先使用沙箱命令执行
+
+        // 优先使用沙箱命令执行（PowerShell 的 Get-Content 自动处理编码）
         const isWindows = process.platform === 'win32';
-        const readCmd = isWindows ? `type "${filePath}"` : `cat "${filePath}"`;
-        
+        const readCmd = isWindows
+          ? `powershell -Command "Get-Content -Path '${filePath}' -Raw -Encoding UTF8"`
+          : `cat "${filePath}"`;
+
         try {
           const result = await this.executeSandboxCommand(readCmd, path.dirname(filePath));
           if (result.success && result.stdout.trim()) {
@@ -80,21 +201,21 @@ export class ToolService {
               },
             };
           }
-          // 命令失败或输出为空，尝试原生 fs
-          const content = await fsPromises.readFile(filePath, 'utf-8');
+          // 命令失败或输出为空，尝试使用编码检测读取
+          const { content } = await detectAndReadFile(filePath);
           return {
             success: true,
             content,
             executionDetails: {
-              terminal: 'Node.js fs',
+              terminal: 'Node.js fs (auto-detect)',
               command: `fs.readFile("${filePath}")`,
               cwd: path.dirname(filePath),
             },
           };
         } catch {
-          // 命令执行出错，尝试原生 fs
+          // 命令执行出错，使用编码检测读取
           try {
-            const content = await fsPromises.readFile(filePath, 'utf-8');
+            const { content } = await detectAndReadFile(filePath);
             return { success: true, content };
           } catch (fsError: any) {
             return { success: false, error: `读取文件失败: ${fsError.message}` };
@@ -117,15 +238,17 @@ export class ToolService {
       level: ToolLevel.L1_SAFE,
       requiresConfirm: true,
       handler: async ({ path: dirPath }: { path: string }) => {
-        const validation = this.validateSandboxPath(dirPath);
+        const validation = this.validatePath(dirPath);
         if (!validation.valid) {
           return { success: false, error: validation.error };
         }
-        
-        // 优先使用沙箱命令执行
+
+        // 使用 PowerShell 列出目录（自动处理编码）
         const isWindows = process.platform === 'win32';
-        const listCmd = isWindows ? `Get-ChildItem -Path "${dirPath}" | Select-Object Name, Mode` : `ls -la "${dirPath}"`;
-        
+        const listCmd = isWindows
+          ? `powershell -Command "Get-ChildItem -Path '${dirPath}' | Format-Table Name, Mode -AutoSize"`
+          : `ls -la "${dirPath}"`;
+
         try {
           const result = await this.executeSandboxCommand(listCmd, dirPath);
           if (result.success && result.stdout.trim()) {
@@ -141,13 +264,14 @@ export class ToolService {
           }
           // 命令失败或输出为空，尝试原生 fs
           const entries = await fsPromises.readdir(dirPath, { withFileTypes: true });
-          const formattedEntries = entries.map(e => ({
-            name: e.name,
-            type: e.isDirectory() ? 'directory' : 'file',
-          }));
+          const lines = entries.map(e => {
+            const type = e.isDirectory() ? 'd-----' : '-a----';
+            const name = e.name;
+            return `${type}\t${name}`;
+          });
           return {
             success: true,
-            content: `[${dirPath}]\n${JSON.stringify(formattedEntries, null, 2)}`,
+            content: `[${dirPath}]\nName\tMode\n----\t----\n${lines.join('\n')}`,
             executionDetails: {
               terminal: 'Node.js fs',
               command: `fs.readdir("${dirPath}")`,
@@ -158,13 +282,14 @@ export class ToolService {
           // 命令执行出错，尝试原生 fs
           try {
             const entries = await fsPromises.readdir(dirPath, { withFileTypes: true });
-            const formattedEntries = entries.map(e => ({
-              name: e.name,
-              type: e.isDirectory() ? 'directory' : 'file',
-            }));
+            const lines = entries.map(e => {
+              const type = e.isDirectory() ? 'd-----' : '-a----';
+              const name = e.name;
+              return `${type}\t${name}`;
+            });
             return {
               success: true,
-              content: `[${dirPath}]\n${JSON.stringify(formattedEntries, null, 2)}`,
+              content: `[${dirPath}]\nName\tMode\n----\t----\n${lines.join('\n')}`,
             };
           } catch (fsError: any) {
             return { success: false, error: `列出目录失败: ${fsError.message}` };
@@ -188,17 +313,17 @@ export class ToolService {
       level: ToolLevel.L1_SAFE,
       requiresConfirm: true,
       handler: async ({ path: searchPath, pattern }: { path: string; pattern: string }) => {
-        const validation = this.validateSandboxPath(searchPath);
+        const validation = this.validatePath(searchPath);
         if (!validation.valid) {
           return { success: false, error: validation.error };
         }
-        
-        // 优先使用沙箱命令执行
+
+        // 使用 PowerShell 搜索文件
         const isWindows = process.platform === 'win32';
-        const searchCmd = isWindows 
-          ? `Get-ChildItem -Path "${searchPath}" -Recurse -Filter "*${pattern}*" | Select-Object FullName, Mode`
+        const searchCmd = isWindows
+          ? `powershell -Command "Get-ChildItem -Path '${searchPath}' -Recurse -Filter '*${pattern}*' | Select-Object FullName, Mode | Format-Table -AutoSize"`
           : `find "${searchPath}" -name "*${pattern}*"`;
-        
+
         try {
           const result = await this.executeSandboxCommand(searchCmd, searchPath);
           if (result.success && result.stdout.trim()) {
@@ -213,30 +338,21 @@ export class ToolService {
             };
           }
           // 命令失败或输出为空，尝试原生 fs
-          const entries = await fsPromises.readdir(searchPath, { withFileTypes: true });
-          const matches = entries
-            .filter(e => e.name.includes(pattern))
-            .map(e => ({ name: e.name, type: e.isDirectory() ? 'directory' : 'file' }));
+          const matches = await this.searchFiles(searchPath, pattern);
           return {
             success: true,
-            content: JSON.stringify(matches),
+            content: matches,
             executionDetails: {
               terminal: 'Node.js fs',
-              command: `fs.readdir("${searchPath}") with filter "${pattern}"`,
+              command: `fs.search("${searchPath}", "${pattern}")`,
               cwd: searchPath,
             },
           };
         } catch {
           // 命令执行出错，尝试原生 fs
           try {
-            const entries = await fsPromises.readdir(searchPath, { withFileTypes: true });
-            const matches = entries
-              .filter(e => e.name.includes(pattern))
-              .map(e => ({ name: e.name, type: e.isDirectory() ? 'directory' : 'file' }));
-            return {
-              success: true,
-              content: JSON.stringify(matches),
-            };
+            const matches = await this.searchFiles(searchPath, pattern);
+            return { success: true, content: matches };
           } catch (fsError: any) {
             return { success: false, error: `搜索文件失败: ${fsError.message}` };
           }
@@ -259,7 +375,7 @@ export class ToolService {
       level: ToolLevel.L3_MEDIUM_RISK,
       requiresConfirm: true,
       handler: async ({ path: filePath, content }: { path: string; content: string }) => {
-        const validation = this.validateSandboxPath(filePath);
+        const validation = this.validatePath(filePath);
         if (!validation.valid) {
           return { success: false, error: validation.error };
         }
@@ -466,8 +582,6 @@ export class ToolService {
   private executeSandboxCommand(command: string, workDir: string): Promise<{ success: boolean; stdout: string; stderr: string; exitCode: number | null }> {
     return new Promise((resolve) => {
       const isWindows = process.platform === 'win32';
-      const shell = isWindows ? 'powershell.exe' : '/bin/bash';
-      const shellArgs = isWindows ? ['-Command', command] : ['-c', command];
 
       // 确保工作目录存在
       if (!fs.existsSync(workDir)) {
@@ -477,46 +591,88 @@ export class ToolService {
       let stdout = '';
       let stderr = '';
 
-      const child = spawn(shell, shellArgs, {
-        cwd: workDir,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, NODE_OPTIONS: '' },
-      });
-
-      child.stdout?.on('data', (data) => {
-        stdout += data.toString();
-      });
-
-      child.stderr?.on('data', (data) => {
-        stderr += data.toString();
-      });
-
-      // 超时控制：10秒
-      const timeout = setTimeout(() => {
-        try {
-          if (process.platform === 'win32') {
-            spawn('taskkill', ['/pid', child.pid!.toString(), '/f', '/t']);
-          } else {
-            process.kill(-child.pid!, 'SIGKILL');
-          }
-        } catch (e) {}
-        resolve({ success: false, stdout, stderr, exitCode: null });
-      }, 10000);
-
-      child.on('close', (code) => {
-        clearTimeout(timeout);
-        resolve({
-          success: code === 0,
-          stdout,
-          stderr,
-          exitCode: code,
+      if (isWindows) {
+        // Windows: 强制使用 UTF-8 编码
+        const child = spawn('powershell.exe', ['-NoProfile', '-Command', `
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          $OutputEncoding = [System.Text.Encoding]::UTF8
+          chcp 65001 > $null
+          ${command}
+        `], {
+          cwd: workDir,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          env: { ...process.env, NODE_OPTIONS: '' },
         });
-      });
 
-      child.on('error', (err) => {
-        clearTimeout(timeout);
-        resolve({ success: false, stdout, stderr, exitCode: null });
-      });
+        child.stdout?.on('data', (data) => {
+          stdout += data.toString('utf-8');
+        });
+
+        child.stderr?.on('data', (data) => {
+          stderr += data.toString('utf-8');
+        });
+
+        // 超时控制：10秒
+        const timeout = setTimeout(() => {
+          try {
+            spawn('taskkill', ['/pid', child.pid!.toString(), '/f', '/t']);
+          } catch (e) {}
+          resolve({ success: false, stdout, stderr, exitCode: null });
+        }, 10000);
+
+        child.on('close', (code) => {
+          clearTimeout(timeout);
+          resolve({
+            success: code === 0,
+            stdout,
+            stderr,
+            exitCode: code,
+          });
+        });
+
+        child.on('error', (err) => {
+          clearTimeout(timeout);
+          resolve({ success: false, stdout, stderr, exitCode: null });
+        });
+      } else {
+        // Linux/Mac
+        const child = spawn('/bin/bash', ['-c', command], {
+          cwd: workDir,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          env: { ...process.env, NODE_OPTIONS: '' },
+        });
+
+        child.stdout?.on('data', (data) => {
+          stdout += data.toString();
+        });
+
+        child.stderr?.on('data', (data) => {
+          stderr += data.toString();
+        });
+
+        // 超时控制：10秒
+        const timeout = setTimeout(() => {
+          try {
+            process.kill(-child.pid!, 'SIGKILL');
+          } catch (e) {}
+          resolve({ success: false, stdout, stderr, exitCode: null });
+        }, 10000);
+
+        child.on('close', (code) => {
+          clearTimeout(timeout);
+          resolve({
+            success: code === 0,
+            stdout,
+            stderr,
+            exitCode: code,
+          });
+        });
+
+        child.on('error', (err) => {
+          clearTimeout(timeout);
+          resolve({ success: false, stdout, stderr, exitCode: null });
+        });
+      }
     });
   }
 }

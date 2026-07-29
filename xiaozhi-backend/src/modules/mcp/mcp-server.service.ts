@@ -168,6 +168,38 @@ export class McpServerService implements OnModuleInit {
     return allTools;
   }
 
+  // 获取已启用 MCP 服务器的目录（用于文件访问权限）
+  async getEnabledServerDirectories(): Promise<Array<{ path: string; serverName: string }>> {
+    const servers = await this.mcpServerRepo.find({ where: { enabled: true } });
+    const directories: Array<{ path: string; serverName: string }> = [];
+
+    for (const server of servers) {
+      // 从 args 中提取路径（最后一个参数通常是路径）
+      if (server.args && server.args.length > 0) {
+        const lastArg = server.args[server.args.length - 1];
+        // 检查是否是有效的目录路径
+        if (lastArg && (lastArg.includes('\\') || lastArg.includes('/'))) {
+          directories.push({
+            path: lastArg,
+            serverName: server.name,
+          });
+        }
+      }
+      // 也检查 cwd 配置
+      if (server.cwd) {
+        const existing = directories.find(d => d.path === server.cwd);
+        if (!existing) {
+          directories.push({
+            path: server.cwd,
+            serverName: server.name,
+          });
+        }
+      }
+    }
+
+    return directories;
+  }
+
   async callTool(serverId: string, toolName: string, args: Record<string, any>) {
     return this.mcpClient.callTool(serverId, toolName, args);
   }

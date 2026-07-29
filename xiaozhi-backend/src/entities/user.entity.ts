@@ -1,7 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, DeleteDateColumn, OneToMany } from 'typeorm';
 import { Agent } from './agent.entity';
 import { Session } from './session.entity';
-import { Workspace } from './workspace.entity';
 import { KnowledgeBase } from './knowledge-base.entity';
 
 @Entity('users')
@@ -38,9 +37,6 @@ export class User {
 
   @OneToMany(() => Session, (session) => session.user)
   sessions: Session[];
-
-  @OneToMany(() => Workspace, (workspace) => workspace.user)
-  workspaces: Workspace[];
 
   @OneToMany(() => KnowledgeBase, (kb) => kb.user)
   knowledgeBases: KnowledgeBase[];
