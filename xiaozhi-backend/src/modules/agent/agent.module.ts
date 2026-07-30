@@ -7,9 +7,10 @@ import { McpModule } from '../mcp/mcp.module';
 import { WorkspaceModule } from '../workspace/workspace.module';
 import { MemoryModule } from '../memory/memory.module';
 import { ConfigModule } from '../../config/config.module';
+import { AgentsModule } from '../agents/agents.module';
 
 @Module({
-  imports: [ConfigModule, ToolsModule, AIModule, McpModule, WorkspaceModule, MemoryModule],
+  imports: [ConfigModule, ToolsModule, AIModule, McpModule, WorkspaceModule, MemoryModule, AgentsModule],
   controllers: [AgentController],
   providers: [AgentExecutor],
   exports: [AgentExecutor],

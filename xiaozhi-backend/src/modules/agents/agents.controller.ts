@@ -1,8 +1,11 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, Res, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { Response } from 'express';
 import { AgentsService } from './agents.service';
 import { CreateAgentDto } from './dto/create-agent.dto';
 import { UpdateAgentDto } from './dto/update-agent.dto';
+import { AgentExportDto } from './dto/agent-export.dto';
+import { GenerateAgentDto } from './dto/generate-agent.dto';
 
 @ApiTags('智能体管理')
 @ApiBearerAuth()
@@ -46,5 +49,46 @@ export class AgentsController {
   @ApiOperation({ summary: '删除智能体' })
   remove(@Param('id') id: string) {
     return this.agentsService.remove(id, 'default-user-id');
+  }
+
+  @Post(':id/lock')
+  @ApiOperation({ summary: '锁定智能体' })
+  lock(@Param('id') id: string) {
+    return this.agentsService.toggleLock(id, 'default-user-id', true);
+  }
+
+  @Post(':id/unlock')
+  @ApiOperation({ summary: '解锁智能体' })
+  unlock(@Param('id') id: string) {
+    return this.agentsService.toggleLock(id, 'default-user-id', false);
+  }
+
+  @Get(':id/export')
+  @ApiOperation({ summary: '导出智能体' })
+  async exportAgent(@Param('id') id: string, @Res() res: Response) {
+    const agent = await this.agentsService.findOne(id, 'default-user-id');
+    if (!agent) {
+      res.status(404).json({ message: '智能体不存在' });
+      return;
+    }
+    const content = this.agentsService.exportAgent(agent);
+
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(agent.name)}.txt"`);
+    res.send(content);
+  }
+
+  @Post('import')
+  @ApiOperation({ summary: '导入智能体' })
+  async importAgent(@Body() body: { content: string }) {
+    const result = await this.agentsService.importAgent('default-user-id', body.content);
+    return result;
+  }
+
+  @Post('generate')
+  @ApiOperation({ summary: '根据内容生成智能体配置（使用 AI）' })
+  async generateAgent(@Body() dto: GenerateAgentDto) {
+    const result = await this.agentsService.generateAgent(dto.content, dto.modelId);
+    return result;
   }
 }

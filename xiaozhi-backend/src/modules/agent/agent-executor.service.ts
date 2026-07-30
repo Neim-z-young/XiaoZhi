@@ -9,6 +9,7 @@ import { McpServerService } from '../mcp/mcp-server.service';
 import { WorkspaceService } from '../workspace/workspace.service';
 import { MemoryService } from '../memory/memory.service';
 import { ModelConfigService } from '../../config/model-config.service';
+import { AgentsService } from '../agents/agents.service';
 
 export interface ThoughtStep {
   id: string;
@@ -70,13 +71,29 @@ function buildSystemPrompt(
   directories: Array<{ path: string; type: string; label: string }> = [],
   enabledBuiltinTools: string[] = [],
   memoryContext?: string,
+  agentConfig?: { name?: string; prompt?: string; toolNames?: string[]; mcpServers?: string[] },
 ): string {
   let prompt = SYSTEM_PROMPT_BASE;
 
+  // 如果有智能体配置，添加智能体角色定义
+  if (agentConfig?.prompt) {
+    prompt += '\n\n## 角色定义\n' + agentConfig.prompt;
+  }
+
+  // 根据智能体配置的 toolNames 过滤工具
+  const availableTools = agentConfig?.toolNames?.length
+    ? enabledBuiltinTools.filter(t => agentConfig.toolNames!.includes(t))
+    : enabledBuiltinTools;
+
+  // 根据智能体配置的 mcpServers 过滤 MCP 工具
+  const availableMcpTools = agentConfig?.mcpServers?.length
+    ? mcpTools.filter(t => agentConfig.mcpServers!.includes(t.serverId))
+    : mcpTools;
+
   // 添加已启用的内置工具
-  if (enabledBuiltinTools.length > 0) {
+  if (availableTools.length > 0) {
     prompt += '\n\n内置工具：';
-    enabledBuiltinTools.forEach((toolName, index) => {
+    availableTools.forEach((toolName, index) => {
       const tool = BUILTIN_TOOLS[toolName];
       if (tool) {
         prompt += `\n${index + 1}. ${toolName}(path): ${tool.description}`;
@@ -103,9 +120,9 @@ function buildSystemPrompt(
   }
 
   // 添加 MCP 工具
-  if (mcpTools.length > 0) {
+  if (availableMcpTools.length > 0) {
     prompt += '\n\nMCP 服务器工具（来自外部 MCP 服务器）：';
-    for (const tool of mcpTools) {
+    for (const tool of availableMcpTools) {
       const params = tool.inputSchema?.properties
         ? Object.keys(tool.inputSchema.properties).map(k => `${k}`).join(', ')
         : '（无参数）';
@@ -137,6 +154,7 @@ export class AgentExecutor implements OnModuleInit {
     private readonly toolService: ToolService,
     private readonly memoryService: MemoryService,
     private readonly modelConfigService: ModelConfigService,
+    private readonly agentsService: AgentsService,
   ) {}
 
   async onModuleInit() {
@@ -204,6 +222,26 @@ export class AgentExecutor implements OnModuleInit {
     // 刷新 MCP 工具，确保获取最新的启用状态
     await this.refreshMcpTools();
 
+    // 加载智能体配置
+    let agentConfig: { name?: string; prompt?: string; toolNames?: string[]; mcpServers?: string[] } = {};
+    if (agentId && agentId !== 'default-agent') {
+      try {
+        const agent = await this.agentsService.findById(agentId);
+        if (!agent) {
+          throw new Error('Agent not found');
+        }
+        agentConfig = {
+          name: agent.name,
+          prompt: agent.prompt,
+          toolNames: agent.toolNames || [],
+          mcpServers: agent.mcpServers || [],
+        };
+        this.logger.log(`Loaded agent config: name=${agent.name}, tools=${agent.toolNames?.length || 0}, mcps=${agent.mcpServers?.length || 0}`);
+      } catch (error: any) {
+        this.logger.warn(`Failed to load agent ${agentId}: ${error.message}`);
+      }
+    }
+
     // 刷新工具配置，确保获取最新的启用/禁用状态
     await this.toolConfigService.refreshEnabledTools();
     const enabledBuiltinTools = await this.toolConfigService.getEnabledToolNames();
@@ -247,7 +285,7 @@ export class AgentExecutor implements OnModuleInit {
     }
 
     let messages = [
-      { role: 'system' as const, content: buildSystemPrompt(this.mcpTools, directories, enabledBuiltinTools, memoryContext) },
+      { role: 'system' as const, content: buildSystemPrompt(this.mcpTools, directories, enabledBuiltinTools, memoryContext, agentConfig) },
       ...shortTermMessages,  // 添加会话历史
       ...context.messages,
       { role: 'user' as const, content: userMessage },

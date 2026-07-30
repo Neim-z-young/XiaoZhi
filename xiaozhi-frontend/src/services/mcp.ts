@@ -12,13 +12,13 @@ export interface McpServer {
   updatedAt: string;
 }
 
-export async function getMcpServers(): Promise<McpServer[]> {
-  const response = await api.get('/mcp/servers');
+export async function getMcpServers(signal?: AbortSignal): Promise<McpServer[]> {
+  const response = await api.get('/mcp/servers', { signal });
   return response.data;
 }
 
-export async function getMcpServer(id: string): Promise<McpServer | null> {
-  const response = await api.get(`/mcp/servers/${id}`);
+export async function getMcpServer(id: string, signal?: AbortSignal): Promise<McpServer | null> {
+  const response = await api.get(`/mcp/servers/${id}`, { signal });
   return response.data;
 }
 

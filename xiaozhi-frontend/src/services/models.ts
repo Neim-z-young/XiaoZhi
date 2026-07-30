@@ -14,11 +14,11 @@ export interface AIModelConfig {
 }
 
 export const modelsApi = {
-  list: () =>
-    api.get<{ models: AIModelConfig[] }>('/models'),
+  list: (signal?: AbortSignal) =>
+    api.get<{ models: AIModelConfig[] }>('/models', { signal }),
 
-  get: (id: string) =>
-    api.get<AIModelConfig>(`/models/${id}`),
+  get: (id: string, signal?: AbortSignal) =>
+    api.get<AIModelConfig>(`/models/${id}`, { signal }),
 
   create: (data: Partial<AIModelConfig>) =>
     api.post<AIModelConfig>('/models', data),

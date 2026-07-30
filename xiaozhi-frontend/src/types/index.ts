@@ -9,13 +9,15 @@ export interface User {
 export interface Agent {
   id: string;
   name: string;
+  slug?: string;
   description?: string;
   avatar?: string;
   modelId: string;
   prompt?: string;
   settings: Record<string, any>;
   enabled: boolean;
-  plugins?: Plugin[];
+  toolNames?: string[];
+  mcpServers?: string[];
   createdAt: string;
   updatedAt: string;
 }

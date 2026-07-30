@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsArray, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsArray, IsBoolean, IsObject } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateAgentDto {
@@ -25,13 +25,33 @@ export class CreateAgentDto {
   @IsString()
   prompt?: string;
 
-  @ApiPropertyOptional({ description: '插件 ID 列表' })
+  @ApiPropertyOptional({ description: '工具名称列表' })
   @IsOptional()
   @IsArray()
-  pluginIds?: string[];
+  toolNames?: string[];
 
   @ApiPropertyOptional({ description: '是否启用' })
   @IsOptional()
   @IsBoolean()
   enabled?: boolean;
+
+  @ApiPropertyOptional({ description: 'MCP 服务器名称列表' })
+  @IsOptional()
+  @IsArray()
+  mcpServers?: string[];
+
+  @ApiPropertyOptional({ description: '是否锁定' })
+  @IsOptional()
+  @IsBoolean()
+  locked?: boolean;
+
+  @ApiPropertyOptional({ description: '英文标识名' })
+  @IsOptional()
+  @IsString()
+  slug?: string;
+
+  @ApiPropertyOptional({ description: '智能体设置' })
+  @IsOptional()
+  @IsObject()
+  settings?: Record<string, any>;
 }

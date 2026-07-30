@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { chatApi } from '@/services/chat';
 import { sessionsApi } from '@/services/sessions';
 import { modelsApi, AIModelConfig } from '@/services/models';
+import { agentsApi } from '@/services/agents';
 import { toolsApi } from '@/services/tools';
 import { Send, Square, ChevronDown, Loader, Sparkles, Check } from 'lucide-react';
 import type { Message } from '@/types';
@@ -83,6 +84,9 @@ export function ChatPage() {
   const [selectedModel, setSelectedModel] = useState<string>('');
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [isAgentMode, setIsAgentMode] = useState(true);
+  const [agents, setAgents] = useState<any[]>([]);
+  const [selectedAgent, setSelectedAgent] = useState<string>('');
+  const [showAgentDropdown, setShowAgentDropdown] = useState(false);
   const [thoughtSteps, setThoughtSteps] = useState<ThoughtStep[]>([]);
   const thoughtStepsRef = useRef<ThoughtStep[]>([]);
   const [currentStep, setCurrentStep] = useState(0);
@@ -120,6 +124,23 @@ export function ChatPage() {
       }
     };
     fetchModels();
+  }, []);
+
+  // 获取智能体列表
+  useEffect(() => {
+    const fetchAgents = async () => {
+      try {
+        const { data } = await agentsApi.list({ pageSize: 100 });
+        const enabledAgents = data.list.filter((a: any) => a.enabled);
+        setAgents(enabledAgents);
+        if (enabledAgents.length > 0 && !selectedAgent) {
+          setSelectedAgent(enabledAgents[0].id);
+        }
+      } catch (error) {
+        console.error('Failed to fetch agents:', error);
+      }
+    };
+    fetchAgents();
   }, []);
 
   // 获取待确认列表
@@ -180,7 +201,7 @@ export function ChatPage() {
 
   // Agent 模式发送
   const handleAgentSend = async () => {
-    if (!input.trim() || isLoading || !selectedModel) return;
+    if (!input.trim() || isLoading || !selectedModel || !selectedAgent) return;
 
     const userMessage = input.trim();
     setInput('');
@@ -211,7 +232,7 @@ export function ChatPage() {
       modelId: selectedModel,
       sessionId: currentSession?.id || `agent-${Date.now()}`,
       userId: 'default-user', // TODO: 后续从登录态获取
-      agentId: 'default-agent',
+      agentId: selectedAgent,
       enableMemory: 'true',
     });
 
@@ -776,11 +797,11 @@ export function ChatPage() {
                 onClick={() => setShowModelDropdown(!showModelDropdown)}
                 className="flex items-center gap-2 px-3 py-1.5 bg-surface border border-border rounded-lg text-sm hover:border-primary transition-colors"
               >
-                <span className="text-white">{selectedModel || '选择模型'}</span>
+                <span className="text-white">{models.find(m => m.id === selectedModel)?.name || '选择模型'}</span>
                 <ChevronDown className="w-4 h-4 text-textMuted" />
               </button>
               {showModelDropdown && (
-                <div className="absolute bottom-full mb-1 right-0 bg-surface-light border border-border rounded-lg shadow-lg overflow-hidden z-10">
+                <div className="absolute bottom-full mb-1 right-0 bg-surface-light border border-border rounded-lg shadow-lg overflow-hidden z-10 max-h-60 overflow-y-auto">
                   {models.map(model => (
                     <button
                       key={model.id}
@@ -795,6 +816,40 @@ export function ChatPage() {
                       {model.name} ({model.provider})
                     </button>
                   ))}
+                </div>
+              )}
+            </div>
+
+            {/* 智能体选择 */}
+            <div className="relative">
+              <button
+                onClick={() => setShowAgentDropdown(!showAgentDropdown)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-surface border border-border rounded-lg text-sm hover:border-primary transition-colors max-w-[200px]"
+              >
+                <Sparkles className="w-4 h-4 text-primary flex-shrink-0" />
+                <span className="text-white truncate">{agents.find(a => a.id === selectedAgent)?.name || '选择智能体'}</span>
+                <ChevronDown className="w-4 h-4 text-textMuted flex-shrink-0" />
+              </button>
+              {showAgentDropdown && (
+                <div className="absolute bottom-full mb-1 right-0 bg-surface-light border border-border rounded-lg shadow-lg overflow-hidden z-10 w-64">
+                  {agents.length === 0 ? (
+                    <div className="px-4 py-2 text-sm text-textMuted">暂无智能体</div>
+                  ) : (
+                    agents.map(agent => (
+                      <button
+                        key={agent.id}
+                        onClick={() => {
+                          setSelectedAgent(agent.id);
+                          setShowAgentDropdown(false);
+                        }}
+                        className={`block w-full px-3 py-2 text-sm text-left hover:bg-primary hover:text-white ${
+                          selectedAgent === agent.id ? 'bg-primary text-white' : 'text-textPrimary'
+                        }`}
+                      >
+                        <div className="truncate font-medium">{agent.name}</div>
+                      </button>
+                    ))
+                  )}
                 </div>
               )}
             </div>

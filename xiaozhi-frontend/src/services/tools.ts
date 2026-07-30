@@ -11,8 +11,8 @@ export interface Tool {
 }
 
 export const toolsApi = {
-  list: () =>
-    api.get<{ list: Tool[]; total: number }>('/tools'),
+  list: (signal?: AbortSignal) =>
+    api.get<{ list: Tool[]; total: number }>('/tools', { signal }),
 
   enable: (id: string) =>
     api.post(`/tools/${id}/enable`),

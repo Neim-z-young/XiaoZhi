@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import axios from 'axios';
+import { useState, useEffect, useRef } from 'react';
 import { Server, Plus, Trash2, Power, PowerOff, RefreshCw, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { getMcpServers, createMcpServer, updateMcpServer, deleteMcpServer, connectMcpServer, disconnectMcpServer, McpServer } from '../../services/mcp';
 
@@ -9,6 +10,7 @@ export function McpServersPage() {
   const [editingServer, setEditingServer] = useState<McpServer | null>(null);
   const [expandedServers, setExpandedServers] = useState<Set<string>>(new Set());
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const [formData, setFormData] = useState({
     id: '',
@@ -19,16 +21,28 @@ export function McpServersPage() {
     enabled: false,
   });
 
+  // StrictMode 在开发模式下会 double-invoke effects，通过 AbortController 取消上一个请求避免重复
   useEffect(() => {
+    abortRef.current = new AbortController();
     loadServers();
+    return () => {
+      abortRef.current?.abort();
+    };
   }, []);
 
   async function loadServers() {
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
+    abortRef.current = new AbortController();
     setLoading(true);
     try {
-      const data = await getMcpServers();
+      const data = await getMcpServers(abortRef.current.signal);
       setServers(Array.isArray(data) ? data : []);
-    } catch (error) {
+    } catch (error: any) {
+      if (axios.isCancel(error) || error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
+        return;
+      }
       console.error('Failed to load MCP servers:', error);
       setServers([]);
     } finally {

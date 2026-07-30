@@ -26,6 +26,9 @@ export class Agent {
   @Column({ name: 'model_id', length: 100 })
   modelId: string;
 
+  @Column({ length: 100, nullable: true, unique: true })
+  slug: string;
+
   @Column({ type: 'text', nullable: true })
   prompt: string;
 
@@ -34,6 +37,15 @@ export class Agent {
 
   @Column({ default: true })
   enabled: boolean;
+
+  @Column({ name: 'locked', default: false })
+  locked: boolean;
+
+  @Column({ name: 'mcp_servers', type: 'json', nullable: true })
+  mcpServers: string[];
+
+  @Column({ name: 'tool_names', type: 'json', nullable: true })
+  toolNames: string[];
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

@@ -22,11 +22,11 @@ export interface UpdateWorkspaceDto {
 }
 
 export const workspacesApi = {
-  list: () =>
-    api.get<{ list: Workspace[]; total: number }>('/workspaces'),
+  list: (signal?: AbortSignal) =>
+    api.get<{ list: Workspace[]; total: number }>('/workspaces', { signal }),
 
-  get: (id: string) =>
-    api.get<Workspace>(`/workspaces/${id}`),
+  get: (id: string, signal?: AbortSignal) =>
+    api.get<Workspace>(`/workspaces/${id}`, { signal }),
 
   create: (data: CreateWorkspaceDto) =>
     api.post<Workspace>('/workspaces', data),

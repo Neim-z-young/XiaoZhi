@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import axios from 'axios';
+import { useState, useEffect, useRef } from 'react';
 import { workspacesApi, Workspace, CreateWorkspaceDto } from '@/services/workspaces';
 
 export function WorkspacesPage() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingWorkspace, setEditingWorkspace] = useState<Workspace | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const [formData, setFormData] = useState<CreateWorkspaceDto>({
     name: '',
     path: '',
@@ -13,15 +15,25 @@ export function WorkspacesPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
 
+  // StrictMode 在开发模式下会 double-invoke effects，通过 AbortController 取消上一个请求避免重复
   useEffect(() => {
+    abortRef.current = new AbortController();
     loadWorkspaces();
+    return () => {
+      abortRef.current?.abort();
+    };
   }, []);
 
   const loadWorkspaces = async () => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
+    abortRef.current = new AbortController();
     try {
-      const { data } = await workspacesApi.list();
+      const { data } = await workspacesApi.list(abortRef.current.signal);
       setWorkspaces(data.list || []);
-    } catch (error) {
+    } catch (error: any) {
+      if (axios.isCancel(error) || error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return;
       console.error('Failed to load workspaces:', error);
     } finally {
       setLoading(false);

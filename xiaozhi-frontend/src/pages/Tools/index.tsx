@@ -1,19 +1,31 @@
-import { useState, useEffect } from 'react';
+import axios from 'axios';
+import { useState, useEffect, useRef } from 'react';
 import { toolsApi, Tool } from '@/services/tools';
 
 export function ToolsPage() {
   const [tools, setTools] = useState<Tool[]>([]);
   const [loading, setLoading] = useState(true);
+  const abortRef = useRef<AbortController | null>(null);
 
+  // StrictMode 在开发模式下会 double-invoke effects，通过 AbortController 取消上一个请求避免重复
   useEffect(() => {
+    abortRef.current = new AbortController();
     loadTools();
+    return () => {
+      abortRef.current?.abort();
+    };
   }, []);
 
   const loadTools = async () => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
+    abortRef.current = new AbortController();
     try {
-      const { data } = await toolsApi.list();
+      const { data } = await toolsApi.list(abortRef.current.signal);
       setTools(data.list || []);
-    } catch (error) {
+    } catch (error: any) {
+      if (axios.isCancel(error) || error.name === 'CanceledError' || error.code === 'ERR_CANCELED') return;
       console.error('Failed to load tools:', error);
     } finally {
       setLoading(false);
